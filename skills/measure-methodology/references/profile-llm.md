@@ -1,7 +1,7 @@
 # Профиль: измерение локальных LLM (Ollama и др.)
 
 > **Это указатель, не копия.** Полный каталог ловушек с провенансом каждой живёт в доктрине:
-> `C:\Users\1\.claude\references\llm-benchmark-pitfalls.md`
+> `C:\Users\<you>\.claude\references\llm-benchmark-pitfalls.md`
 > (зеркало на `D:` в `Doctrine\references\`, репозиторий `Verter73/claude-doctrine`).
 > Читать оттуда.
 >
