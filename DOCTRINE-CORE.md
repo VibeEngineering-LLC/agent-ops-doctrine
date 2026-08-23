@@ -226,6 +226,39 @@ paths in shell commands (`C:/Users/...` works fine in Git Bash), or drop the tra
 before the closing quote, or use single quotes (backslash is literal inside single quotes in
 POSIX shells, so a trailing one is harmless there).
 
+## 16. Loops: automating repeatable, machine-checkable work
+
+Beyond one-off delegation (rung 1-3 above), a task that repeats regularly can graduate to a
+**loop** — an unattended cycle that finds the task, hands it to an executor, checks the result
+with an objective gate, records state, and repeats on a schedule. This is a distinct mode from
+the delegation ladder, not a replacement for it — the ladder still governs what happens *inside*
+a loop's execution step.
+
+**Entry gate — five conditions, all required, or it stays a manual prompt:** (1) repeats at
+least weekly; (2) an **objective gate** exists — a test/build/lint/checker that can reject a bad
+result without a human or a model's "opinion," and it's been shown to actually reject a
+deliberately-broken input, not just accept everything; (3) the executor can actually *run* the
+result in its environment; (4) a hard stop — iteration limit AND time limit AND call-count limit,
+all set in advance; (5) anything irreversible (merge, push, deploy, delete, publish) comes out of
+the loop only as a draft/PR/message for a human, never executed directly. Bad candidates:
+architecture, auth/payments, deploys, client-facing conclusions, regulatory/safety judgment —
+anywhere "done" is itself a judgment call.
+
+**Minimum viable loop:** one trigger/automation + one skill (project context) + one state file +
+one gate. Build order matters: a reliable **manual** run first, then wrap it in a skill, then a
+loop, then a schedule — skipping straight to automation produces a system nobody understands.
+**Metric:** accepted-changes ratio over a rolling window; below roughly half, the loop is doing
+more harm (review overhead) than good and should be shut down, not tuned further.
+
+**Known failure modes to design against, not discover the hard way:** a loop that declares
+"done" without the gate actually catching bad output (the objective gate must be shown to reject
+a deliberately-broken input, not just accept good ones — this is the same #SA-3 discipline from
+§12 above, applied to an unattended loop instead of a one-off check); the executor and its
+checker being the same model (self-preference bias — use a genuinely different model or a
+non-model check as the gate, never a model's "opinion" alone); goal drift over a long unattended
+run (mitigate by re-reading the skill/spec every cycle, not just at the start); and a soft stop
+condition that never actually fires because it's phrased as text rather than a checked value.
+
 ## Anti-hallucination, throughout
 
 Every factual claim about a user's files, data, or system state should cite a concrete
