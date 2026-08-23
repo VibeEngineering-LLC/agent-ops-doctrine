@@ -273,7 +273,48 @@ recurring-review clause written as prose is the same failure as a soft stop cond
 fine and fires never. Give every loop a `next_review` field (a concrete date) in its state/card,
 set on creation and reset on each review; a loop whose `next_review` has passed without a
 recorded review is a loop overdue for shutdown under the same acceptance-ratio rule above, not a
-loop waiting patiently for someone to remember.
+loop waiting patiently for someone to remember. The same standard applies to the acceptance
+metric itself: if each output is born marked `accepted: pending` and nothing ever forces those
+marks to be resolved, the ratio silently measures nothing. Make the loop refuse to start once
+unresolved outputs pile past a small threshold — a loop whose results nobody reviews should stop
+itself rather than keep producing.
+
+**A declared mechanism that was never demonstrated does not exist.** It is easy to write "the
+script enforces the iteration limit / validates required state fields / rejects writes outside
+its allowed paths / maintains the acceptance metric" and never show any of it working.
+Acceptance of a loop includes demonstrating each claimed mechanism the same way the gate is
+demonstrated — break it, watch it trip: exceed the limit and see the run stop; remove a required
+state field and see it fail; attempt a write outside the allowed list and see it refused. An
+undemonstrated mechanism is a stop condition written as prose, wearing different clothes.
+
+**A sterile second read is not optional once the loop emits anything a human will read.** The
+objective gate catches structural defects — compiles or doesn't, passes or doesn't. It is blind
+to semantic ones: plausible-but-wrong prose, a subtle fabrication, an answer to a question
+nobody asked, all while the gate stays green. Route any human-readable output (a draft, a
+message, a summary) through one additional check whose context never saw the generation: a
+separate call carrying only the task and the acceptance criteria, never the executor's reasoning
+and never the expected answer — a named answer gets confirmed, not verified. Use a different
+model, or the same model with genuinely no history carried in. Know its limit, though: this
+catches drift from the *stated* task, not a wrongly stated task. If the loop's spec is wrong, a
+sterile pass will faithfully confirm faithful execution of a wrong spec — only the entry gate and
+the periodic human review defend against that.
+
+**Escalation must physically arrive, not merely be recorded.** A loop that writes "escalated" to
+its state file and never delivers the message has produced the appearance of an escalation. Make
+delivery the acceptance condition — write the file, then verify it exists, and fail the run if it
+does not. This is the same class as a test that reports success without running: the difference
+between an output and a result.
+
+**Retry a suspiciously empty answer before believing it.** An unattended executor that returns
+"nothing found" in a fraction of its usual time has more likely failed silently than genuinely
+found nothing — especially at temperature zero, where the same input twice should give the same
+answer. Re-run once, record the fact of the retry in the state file, and surface it: a difference
+between two identical runs is itself a finding about the harness, not noise to smooth over.
+
+**Report aggregates hide per-item anomalies.** A harness that flags "all lenses returned zero"
+or "total runtime was implausibly short" will stay silent when exactly one of them fails that
+way — the aggregate absorbs it. Check each item on its own terms as well as in the total; a
+single degenerate component is precisely the signal worth catching.
 
 ## Anti-hallucination, throughout
 
