@@ -259,6 +259,22 @@ non-model check as the gate, never a model's "opinion" alone); goal drift over a
 run (mitigate by re-reading the skill/spec every cycle, not just at the start); and a soft stop
 condition that never actually fires because it's phrased as text rather than a checked value.
 
+**The frontier/expensive model does not run inside the loop.** Once a task passes the entry
+gate, every stage inside the cycle — trigger, task discovery, classification, drafting,
+gate-checking, state-write — runs on a cheap/local model or a plain script; the capable model's
+role is limited to writing the one-time spec the loop executes against, and to receiving
+escalations the loop can't resolve on its own. If the loop's own executor keeps needing the
+expensive model to do real work turn after turn, it hasn't graduated past the delegation ladder
+(§13) — it's an unattended session wearing a loop's clothing, and should be budgeted (and
+reviewed) as one.
+
+**"Review every 30 days" is not a rule until something actually checks the date.** A
+recurring-review clause written as prose is the same failure as a soft stop condition: it reads
+fine and fires never. Give every loop a `next_review` field (a concrete date) in its state/card,
+set on creation and reset on each review; a loop whose `next_review` has passed without a
+recorded review is a loop overdue for shutdown under the same acceptance-ratio rule above, not a
+loop waiting patiently for someone to remember.
+
 ## Anti-hallucination, throughout
 
 Every factual claim about a user's files, data, or system state should cite a concrete
