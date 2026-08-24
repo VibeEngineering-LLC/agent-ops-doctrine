@@ -18,6 +18,15 @@
   аудитории; сами скиллы ниже в основном на русском (язык оригинала).
 - [`LICENSE`](LICENSE) — MIT.
 - `skills/` — 22 скилла Claude Code (`SKILL.md` + `references/` + при необходимости `scripts/`).
+- [`references/loop-doctrine.md`](references/loop-doctrine.md) — полное тело практики «петель»
+  (§16 в `DOCTRINE-CORE.md` — конспект; здесь — гейт входа, три кольца защиты, стерильность
+  локальных аудиторов, формат карточки и файла состояния, каталог сбоев). Русский, на русском
+  написан и весь остальной корпус ниже.
+- [`scripts/audit_doctrine.py`](scripts/audit_doctrine.py) + [`spec_audit_doctrine.md`](scripts/spec_audit_doctrine.md) —
+  рабочий инструмент стерильного аудита markdown-документа пятью независимыми линзами через
+  локальную модель (Ollama), на который ссылается `loop-doctrine.md`. Запускается сразу из этого
+  репозитория (`python scripts/audit_doctrine.py --selftest`), пути к зависимостям резолвятся
+  относительно расположения скрипта.
 
 ## Перечень скиллов — что зачем
 
