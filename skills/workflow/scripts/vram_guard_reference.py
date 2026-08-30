@@ -1,14 +1,18 @@
-# Reference implementation of Ollama Layer 2 VRAM guard — v1.8.0.
-# Consuming projects MAY copy verbatim to <project>/scripts/ollama/_vram_guard.py
-# or <project>/audit/_drafts/_ollama_helpers/_vram_guard.py
+# Reference implementation of Ollama Layer 2 VRAM guard — v1.9.2 (2026-08-28).
+# CANONICAL SOURCE: C:\Users\<you>\.claude\skills\workflow\scripts\vram_guard_reference.py
 #
-# Source: gamma-spectrum-analysis audit/_drafts/_ollama_helpers/_vram_guard.py
-# Shipped in workflow-skill v1.7.0 for discoverability; v1.8.0 adds
-# three-tier GPU/queue/CPU fallback (SpectraVibe Task 75D, commit 6b910bc).
+# Consuming projects MAY copy verbatim to <project>/scripts/ollama/_vram_guard.py.
+# IF YOU COPY THIS FILE: check GUARD_VERSION below against the canonical source
+# before trusting it. On 2026-08-28 eighteen copies existed across the tree, eight
+# of them missing the thinking-model guard, and ALL of them still claimed "v1.8.0"
+# in this header because the header was never updated with the body — two contours
+# diagnosed the version from this line that day and both got a false answer.
+# Prefer importing over copying (doctrine §33); if you must copy, re-check on every
+# guard change. `python vram_guard_reference.py --version` prints GUARD_VERSION.
 #
 # Pairs with pre_flight_reference.py (Layer 1 — coarse profile guard).
 # See skill/SKILL.md "Pre-flight check — two-layer VRAM guard" for the rationale.
-# See skill/SKILL.md "Three-tier Ollama fallback (v1.8.0+)" for the queue API.
+# See skill/SKILL_VRAM_GUARD.md "GPU-only Ollama fallback" for the queue API.
 """
 VRAM pre-flight guard for Ollama helpers.
 
@@ -113,10 +117,18 @@ MODEL_VRAM_ESTIMATE_MB: dict[str, int] = {
     "bge-m3:latest":    1_500,
 }
 
-# Thinking-capable models where `format="json"` silently routes the answer into the
-# hidden `thinking` field, leaving `response` empty with done=true (no exception).
-# guarded_generate() auto-sets think=False for these when fmt=="json" and the caller
-# didn't pass `think` explicitly. See SKILL_VRAM_GUARD.md "Thinking models" (2026-08-23).
+# Thinking-capable models. Two measured failure modes, BOTH fixed by think=False:
+#   1. fmt="json": the answer lands in the hidden `thinking` field, `response` comes
+#      back empty with done=true and no exception (2026-08-23, v1.9.0).
+#   2. long codegen (fmt=None): reasoning eats the num_predict budget, output is cut
+#      mid-function with done_reason="length". Measured on qwen3.6:27b, same prompt,
+#      num_predict=6000: think on -> 19347 chars of thinking, 3891 chars of code,
+#      TRUNCATED; think off -> 0 thinking, 10236 chars of code, done_reason="stop"
+#      (LLM contour P-002, 2026-08-23 evening).
+# Hence v1.9.1: guarded_generate() auto-sets think=False for these models on EVERY
+# call, regardless of fmt. guarded_generate() delegates mechanical work — reasoning
+# is not what it is for. Callers who genuinely want it pass think=True explicitly.
+# See SKILL_VRAM_GUARD.md "Thinking models".
 THINKING_CAPABLE_MODELS: set[str] = {
     "qwen3.6:27b",
     "qwen3.6:latest",
@@ -130,13 +142,20 @@ THINKING_CAPABLE_MODELS: set[str] = {
 # num_predict= kwarg always overrides this.
 MODEL_NUM_PREDICT_CAP: dict[str, int] = {}
 
-# Hard trial block (operator decision 2026-08-23 evening): while observing
-# qwen3.6:27b as sole delegation default, qwen3-coder:30b must NOT load at
-# all — even one call would evict the resident qwen3.6:27b (24 GB card,
-# both models ~17-18 GB, can't coexist). check_can_load() refuses ANY model
-# in this set unconditionally, before the VRAM probe. Lift by clearing this
-# set (operator instruction only — do not clear on your own judgment).
-TRIAL_BLOCKED_MODELS: set[str] = {"qwen3-coder:30b"}
+# Hard trial block: check_can_load() and try_cpu() refuse ANY model listed here
+# unconditionally, before the VRAM probe. Populate ONLY on explicit operator
+# instruction, and clear it the same way — never on your own judgment.
+#
+# History: qwen3-coder:30b was blocked 2026-08-23 evening while observing
+# qwen3.6:27b as sole delegation default (24 GB card, both models ~17-18 GB,
+# so one call to the other model evicts the resident one). LIFTED the same
+# night on operator instruction, after the block's first practical cost showed
+# up: the GEANT4 contour hit a codegen failure on qwen3.6:27b (LLM contour
+# P-002) and qwen3-coder is ~6x cheaper per correct answer on code by the
+# Codeaudit 2026-08-23 benchmark (2.8 vs 16.8, median time / class score).
+# qwen3.6:27b REMAINS the delegation default — see SKILL.md; qwen3-coder:30b
+# is simply reachable again on explicit request.
+TRIAL_BLOCKED_MODELS: set[str] = set()
 
 # ---------------------------------------------------------------------------
 # Per-model RAM estimates (GB) for CPU fallback mode (num_gpu=0).
@@ -162,6 +181,12 @@ CPU_OS_RESERVE_GB: int = 4
 # 3 GB on RTX 4090 covers: Windows DWM + browser GPU compositing
 # (~1-1.5 GB) + small Python procs (~0.5 GB) + ~1 GB generative slack
 # (KV cache expansion mid-generation, allocator fragmentation).
+# Bump on EVERY behaviour change, together with the header line. Machine-readable
+# so copies can be diffed against the canonical source without reading comments —
+# the 2026-08-28 drift (8 stale copies, all claiming v1.8.0) was invisible precisely
+# because the only version marker was a comment nobody updated.
+GUARD_VERSION: str = "1.9.2"
+
 SYSTEM_RESERVE_MB: int = 3_000
 
 OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
@@ -333,10 +358,18 @@ def check_can_load(
         else MODEL_VRAM_ESTIMATE_MB.get(model_name, 10_000)
     )
 
-    already_loaded = any(m.get("name") == model_name for m in loaded)
+    # v1.9.2 (2026-08-28, Программист W-019, C-003): size_vram distinguishes
+    # "resident on GPU" from "resident on CPU" (size_vram==0). A model that
+    # fell to CPU once must NOT be treated as already_loaded forever — that
+    # silently pinned it to CPU even after VRAM freed up. CPU-resident falls
+    # through to the ordinary headroom check below, same as not-loaded.
+    already_loaded_gpu = any(
+        m.get("name") == model_name and m.get("size_vram", 0) > 0
+        for m in loaded
+    )
     headroom_MB = free_MB - reserve_MB
 
-    if already_loaded:
+    if already_loaded_gpu:
         return VramVerdict(
             ok=True, reason="already_loaded", model_name=model_name,
             free_MB=free_MB, used_MB=used_MB, total_MB=total_MB,
@@ -743,6 +776,18 @@ def _available_ram_gb() -> float:
     return -1.0
 
 
+def _warn_if_truncated(result: dict[str, Any], model: str) -> None:
+    """v1.9.1 (2026-08-23, P-002): surface Ollama's own truncation signal.
+    done_reason != "stop" means the response was cut off (num_ctx/num_predict
+    limit), not the model choosing to stop — otherwise invisible to the caller.
+    """
+    reason = result.get("done_reason")
+    if reason and reason != "stop":
+        print(f"[vram_guard] WARNING: {model} generation truncated, "
+              f"done_reason={reason!r} (likely num_ctx/num_predict limit) — "
+              f"response is probably incomplete", file=sys.stderr)
+
+
 def try_cpu(
     model: str,
     prompt: str,
@@ -813,11 +858,11 @@ def try_cpu(
         payload["format"] = fmt
     if keep_alive is not None:
         payload["keep_alive"] = keep_alive
-    # v1.9.0: auto-guard thinking models against the silent-empty-response failure
-    # (answer lands in `thinking`, not `response`, when format="json" triggers
-    # reasoning). Caller-supplied `think` always wins.
+    # v1.9.1: auto-guard thinking models on EVERY call (not just fmt=="json") —
+    # see THINKING_CAPABLE_MODELS for the two measured failure modes.
+    # Caller-supplied `think` always wins.
     effective_think = think
-    if effective_think is None and fmt == "json" and model in THINKING_CAPABLE_MODELS:
+    if effective_think is None and model in THINKING_CAPABLE_MODELS:
         effective_think = False
     if effective_think is not None:
         payload["think"] = effective_think
@@ -825,7 +870,9 @@ def try_cpu(
     r = requests.post(f"{OLLAMA_BASE_URL}/api/generate",
                       json=payload, timeout=cpu_timeout)
     r.raise_for_status()
-    return r.json()
+    result = r.json()
+    _warn_if_truncated(result, model)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -859,15 +906,16 @@ def guarded_generate(
     num_predict: int | None = None,
 ) -> "dict[str, Any] | tuple[dict[str, Any], Literal['gpu', 'cpu']]":
     """
-    Three-tier fallback for `requests.post('/api/generate', ...)`:
+    Two-tier fallback for `requests.post('/api/generate', ...)` (CPU tier
+    REMOVED 2026-08-28, operator instruction "проц запрещён" / "оллама
+    только гпу" — see try_cpu() below, kept for explicit manual use only):
 
       Tier 1 (GPU direct): check_can_load → if OK, call /api/generate on GPU.
       Tier 2 (queue):      if GPU busy AND want_gpu=True, enter cross-chat queue.
-                           First-in-line + VRAM free → GPU. Drop-out (pos>2 OR
-                           wait>120s) → fall through to CPU.
-      Tier 3 (CPU):        try_cpu with num_gpu=0 + RAM check + 5x timeout.
-      Tier 4 (Claude):     not handled here — try_cpu raises VramGuardFailure
-                           when RAM is also insufficient; caller falls back.
+                           First-in-line + VRAM free → GPU.
+      Tier 3 (Claude):     not handled here — raises VramGuardFailure when
+                           GPU is unavailable after tiers 1-2; caller falls
+                           back to Claude / retries / raises priority.
 
     Priority classes:
       orchestrator = 100  (main loop; blocks user dialog)
@@ -907,16 +955,18 @@ def guarded_generate(
             payload["format"] = fmt
         if keep_alive is not None:
             payload["keep_alive"] = keep_alive
-        # v1.9.0 thinking-model auto-guard — see try_cpu() above / SKILL_VRAM_GUARD.md
+        # v1.9.1 thinking-model auto-guard — see try_cpu() above / SKILL_VRAM_GUARD.md
         effective_think = think
-        if effective_think is None and fmt == "json" and model in THINKING_CAPABLE_MODELS:
+        if effective_think is None and model in THINKING_CAPABLE_MODELS:
             effective_think = False
         if effective_think is not None:
             payload["think"] = effective_think
         r = requests.post(f"{OLLAMA_BASE_URL}/api/generate",
                           json=payload, timeout=gpu_timeout_s)
         r.raise_for_status()
-        return r.json()
+        result = r.json()
+        _warn_if_truncated(result, model)
+        return result
 
     mode: Literal["gpu", "cpu"] = "gpu"
 
@@ -938,18 +988,18 @@ def guarded_generate(
             if q.ok:
                 resp = _gpu_call()
                 return (resp, "gpu") if return_mode else resp
-            # Queue recommended CPU — fall through.
+            # Queue gave up waiting for GPU headroom.
+            verdict = q
+    else:
+        verdict = check_can_load(model, reserve_MB=reserve_MB,
+                                 estimate_override_MB=estimate_override_MB)
 
-    # Tier 3: CPU. Raises VramGuardFailure if RAM also insufficient → caller uses Claude.
-    resp = try_cpu(
-        model, prompt,
-        fmt=fmt, temperature=temperature, num_ctx=num_ctx,
-        gpu_timeout_s=gpu_timeout_s, cpu_timeout_multiplier=cpu_timeout_multiplier,
-        extra_options=extra_options, think=think,
-        keep_alive=keep_alive, num_predict=num_predict,
-    )
-    mode = "cpu"
-    return (resp, mode) if return_mode else resp
+    # CPU inference is DISABLED per operator instruction 2026-08-28
+    # ("проц запрещён" / "оллама только гпу"). try_cpu() is kept below for
+    # explicit manual use only — guarded_generate() never falls back to it
+    # on its own. Caller must handle VramGuardFailure (retry, raise queue
+    # priority, or escalate to Claude).
+    raise VramGuardFailure(verdict)
 
 
 # ---------------------------------------------------------------------------
@@ -976,7 +1026,9 @@ def _watch(model: str | None, poll_s: float, reserve_MB: int) -> None:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Ollama VRAM pre-flight guard (v1.8.0)")
+    p = argparse.ArgumentParser(description=f"Ollama VRAM pre-flight guard (v{GUARD_VERSION})")
+    p.add_argument("--version", action="store_true",
+                   help="print GUARD_VERSION and exit (use to diff copies against canonical)")
     p.add_argument("--check", metavar="MODEL", help="check a specific model")
     p.add_argument("--wait", type=float, default=0.0,
                    help="poll up to N seconds for free VRAM (default: 0 = fail-fast)")
@@ -985,6 +1037,10 @@ def main() -> int:
     p.add_argument("--reserve-MB", type=int, default=SYSTEM_RESERVE_MB,
                    help=f"system reserve in MB (default {SYSTEM_RESERVE_MB})")
     args = p.parse_args()
+
+    if args.version:
+        print(GUARD_VERSION)
+        return 0
 
     if args.watch:
         _watch(args.check, args.poll_s, args.reserve_MB)

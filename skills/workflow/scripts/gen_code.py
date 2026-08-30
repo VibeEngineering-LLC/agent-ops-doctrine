@@ -1,19 +1,27 @@
 """Reusable Ollama codegen driver (workflow skill, IRON-MODE harness).
 Claude authors the spec (.md); qwen3-coder:30b generates the code; this helper saves it.
 Imports guarded_generate from the sibling vram_guard_reference.py (self-contained).
-Usage: python gen_code.py <spec.md> <out.py> [num_predict=6000] [num_ctx=16384]"""
+Usage: python gen_code.py <spec.md> <out.py> [num_predict=16000] [num_ctx=32768]
+v1.1 (2026-08-23, P-002): defaults raised (6000 tokens truncated 400-line files
+mid-function) and truncated output now FAILS loudly instead of being saved silently."""
 import sys, pathlib
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from vram_guard_reference import guarded_generate  # type: ignore
 spec = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 out = pathlib.Path(sys.argv[2])
-npred = int(sys.argv[3]) if len(sys.argv) > 3 else 6000
-nctx = int(sys.argv[4]) if len(sys.argv) > 4 else 16384
+npred = int(sys.argv[3]) if len(sys.argv) > 3 else 16000
+nctx = int(sys.argv[4]) if len(sys.argv) > 4 else 32768
 model = sys.argv[5] if len(sys.argv) > 5 else "qwen3-coder:30b"
 resp = guarded_generate(model=model, prompt=spec, fmt=None, want_gpu=True,
     priority=50, max_wait_s=900, temperature=0, num_ctx=nctx, extra_options={"num_predict": npred})
 text = resp.get("response", "") if isinstance(resp, dict) else str(resp)
+reason = resp.get("done_reason") if isinstance(resp, dict) else None
+if reason and reason != "stop":
+    print(f"[gen] ABORT: truncated (done_reason={reason!r}, "
+          f"eval_count={resp.get('eval_count')}, npred={npred}). Nothing written. "
+          f"Raise num_predict or split the spec.", file=sys.stderr)
+    sys.exit(2)
 t = text.strip()
 if t.startswith("```"):
     t = t.split("\n", 1)[1] if "\n" in t else t

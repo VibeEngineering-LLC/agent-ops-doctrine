@@ -49,8 +49,15 @@ response = guarded_generate(
 )
 ```
 
-Reference-имплементация guard'а: `~/claude-workflow-skill/scripts/vram_guard_reference.py`
-(копируется в проект как `scripts/ollama/_vram_guard.py`).
+Эталон guard'а: `C:\Users\<you>\.claude\skills\workflow\scripts\vram_guard_reference.py`.
+**Подключается ИМПОРТОМ, не копией** (§33; практика копирования отменена миграцией
+2026-08-28/29 — 17 путей с копиями сведены к импорту, расхождения версий были прямым
+следствием копий):
+```python
+sys.path.insert(0, r"C:\Users\<you>\.claude\skills\workflow\scripts")
+from vram_guard_reference import guarded_generate
+```
+Копия в проекте (`scripts/ollama/_vram_guard.py` и любая другая) — дефект, а не вариант.
 
 ## Context-инъекция (прежде чем сказать «Ollama не знает X»)
 

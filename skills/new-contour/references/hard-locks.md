@@ -152,7 +152,7 @@ spawned while `revival #N` is still alive from before the compaction.
 
 ## HL-5 — Source git is read-only: a tester works only in a clone (detail)
 
-Standing operator rule (the operator, 2026-06-06, verbatim: «Запрети тестеру изменять что-то в
+Standing operator rule (2026-06-06, verbatim: «Запрети тестеру изменять что-то в
 исходном гите проекта. Работа только в клоне!!!»). A tester/verifier contour **NEVER**
 mutates the canonical (source-of-truth) git of the project under test. All build / deploy /
 test / fix-experiment work happens in a **clone**; the canonical repo is a **read-only
