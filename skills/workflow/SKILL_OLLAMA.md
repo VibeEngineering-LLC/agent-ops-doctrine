@@ -4,8 +4,8 @@ Reference for the `workflow` skill. Core `SKILL.md` keeps only the LOCKED model 
 `guarded_generate()` crash HARD RULE, and pointers; the operational detail lives here — load
 on demand.
 
-Related references: `SKILL_VRAM_GUARD.md` (two-layer VRAM guard, three-tier GPU/queue/CPU
-fallback, per-role `num_ctx`), `SKILL_IRON_MODE.md` (dispatch-only lock + codegen harness).
+Related references: `SKILL_VRAM_GUARD.md` (two-layer VRAM guard, GPU → queue → loud
+failure — Ollama on CPU is forbidden, #CPU-1 — per-role `num_ctx`), `SKILL_IRON_MODE.md` (dispatch-only lock + codegen harness).
 Global policy: `~/.claude/CLAUDE.md` §8 "Local-First (Ollama) — MAXIMUM delegation" and §2
 "Windows stdout — UTF-8".
 
@@ -23,7 +23,7 @@ auto-guards `think=false` on `format="json"` calls, no manual handling needed:
 
 If all four are NO, the task belongs to Claude / a Claude subagent.
 
-**`format='json'` batch caveat (Codeaudit finding, 2026-08-23):** Ollama's grammar-constrained
+**`format='json'` batch caveat (аудит-кода finding, 2026-08-23):** Ollama's grammar-constrained
 JSON mode stops generation after the FIRST object on multi-item output — confirmed 0.00 score
 across all 5 fleet models on a 200-item batch (13 tokens produced vs 2893 needed), correct only
 without `format`. Use `format='json'` ONLY for a single-object response; for any list/array of

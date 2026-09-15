@@ -26,7 +26,7 @@ description: "Переживание сжатия контекста без по
 
 ### Что пишет PreCompact-хук
 
-Снапшот в `C:\Users\<you>\.claude\compact-snapshots\snap_<дата>-<время>_<сессия>.md` плюс указатель
+Снапшот в `<home>\.claude\compact-snapshots\snap_<дата>-<время>_<сессия>.md` плюс указатель
 `latest.json`. Внутри — **только механически проверяемое**, без интерпретации:
 
 - последние указания оператора **дословно** (основной источник — user-записи со СТРОКОВЫМ
@@ -106,7 +106,7 @@ echo '{"session_id":"probe","transcript_path":"<путь к .jsonl>","cwd":"<п�
   | python C:/Users/<you>/.claude/skills/compact-guard/scripts/precompact_snapshot.py
 
 # что записалось
-ls C:\Users\<you>\.claude\compact-snapshots\
+ls <home>\.claude\compact-snapshots\
 
 # что увидит агент после сжатия
 echo '{"source":"compact"}' | python C:/Users/<you>/.claude/skills/compact-guard/scripts/postcompact_restore.py
@@ -134,7 +134,7 @@ content, и пишутся сразу; `last-prompt` пишется лениво
 `{"suppressOutput":true}` (видимость успеха), но файл снапшота на диске оказался **0 байт**, а
 `latest.json` не обновился. Причина: скрипт форсировал UTF-8 только на `sys.stdout`, не на
 `sys.stdin`. На cp1251-консоли оператора (CLAUDE.md §2) `sys.stdin.read()` декодировал JSON-payload
-от Claude Code не тем кодеком — кириллица в `cwd` (в частности слово «Цензор») превращалась в
+от Claude Code не тем кодеком — кириллица в `cwd` (в частности слово «надзорный») превращалась в
 суррогатные code points; `f.write()` в файл со строгим `encoding="utf-8"` падал
 `UnicodeEncodeError: surrogates not allowed`, исключение ковталось широким `except`, оставляя
 файл открытым-и-пустым (обнулён `open(...,"w")` до записи содержимого). Поймано ТОЛЬКО потому что

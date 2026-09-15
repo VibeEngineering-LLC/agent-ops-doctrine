@@ -1,6 +1,6 @@
 ---
 name: doc-extract
-description: "Corpus-agnostic примитивы для извлечения plain text из документов: PDF (text layer + scan detect), сканированный PDF через OCR (PyMuPDF + Tesseract rus+eng), legacy Office (.doc/.ppt/.rtf через LibreOffice), .pptx, .csv, spreadsheets (.xls/.xlsx). Importable-функции, своего корпуса нет. Use when a pipeline needs arbitrary office/PDF → text и базового docx/txt/md-экстрактора `docs-rag` не хватает."
+description: "Corpus-agnostic примитивы для извлечения plain text из документов: PDF (text layer + scan detect), сканированный PDF через OCR (PyMuPDF + Tesseract rus+eng), legacy Office (.doc/.ppt/.rtf через LibreOffice), .pptx, .csv, spreadsheets (.xls/.xlsx). Importable-функции, своего корпуса нет. Use when a pipeline needs arbitrary office/PDF → text и базового docx/txt/md-экстрактора приватного RAG-скилла не хватает."
 ---
 
 # doc-extract
@@ -13,12 +13,12 @@ Per-файловые **примитивы извлечения текста**, �
 ## Слой
 
 ```
-docs-rag        базовый extract_text: .docx / .txt / .md  (фундамент)
+<rag-skill>     базовый extract_text: .docx / .txt / .md  (фундамент)
    └─ doc-extract   + PDF (текст-слой + детект скана), OCR скана,
                       legacy .doc/.ppt/.rtf (LibreOffice), .pptx, .csv, .xls/.xlsx/.xlsm
 ```
-doc-extract сидит НАД docs-rag: для .docx/.txt/.md по-прежнему вызывайте
-`docs-rag.extract.extract_text`, doc-extract его не дублирует.
+doc-extract сидит НАД приватным RAG-скиллом (`<rag-skill>`, не публикуется): для
+.docx/.txt/.md по-прежнему вызывайте `<rag-skill>.extract.extract_text`, doc-extract его не дублирует.
 
 ## markitdown — turnkey «что угодно → markdown» (+ MCP-сервер)
 
@@ -31,7 +31,7 @@ epub, csv, image (EXIF + опц. LLM-caption), outlook `.msg`, ipynb, zip, rss, 
 youtube, bing-serp, audio (транскрипция). docx→md round-trip проверен на нашем отчёте —
 GFM-таблицы, кириллица, escape целы.
 
-**MCP-сервер `markitdown-mcp`** зарегистрирован в `C:\Users\<you>\.claude.json` →
+**MCP-сервер `markitdown-mcp`** зарегистрирован в `<home>\.claude.json` →
 `mcpServers.markitdown` (transport **stdio**, `command` = `...\.local\bin\markitdown-mcp.exe`).
 Tool `convert_to_markdown` (принимает `http:`/`https:`/`file:`/`data:` URI) доступен в
 **новых** сессиях Claude Code (сессия, стартовавшая до регистрации, его не видит —
@@ -72,7 +72,7 @@ PyMuPDF (`fitz`), `pytesseract` + Tesseract-OCR (языки `rus`+`eng`), `pytho
 
 ```python
 import sys
-sys.path.insert(0, r"C:\Users\<you>\.claude\skills\doc-extract\scripts")
+sys.path.insert(0, r"<home>\.claude\skills\doc-extract\scripts")
 from doc_extract import (
     pdf_text_and_scanflag, pptx_text, csv_text, sheet_text,   # форматы
     ocr_pdf, check_langs,                                      # OCR
@@ -158,13 +158,13 @@ CONSISTENT.
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
 # 1. Импорт + резолв SOFFICE
-python -c "import sys; sys.path.insert(0,r'C:\Users\<you>\.claude\skills\doc-extract\scripts'); import doc_extract as d; print('OK', d.SOFFICE.exists())"
+python -c "import sys; sys.path.insert(0,r'<home>\.claude\skills\doc-extract\scripts'); import doc_extract as d; print('OK', d.SOFFICE.exists())"
 # 2. Идентичность примитивов против radon-оригиналов (нужен radon-library корпус)
-python "C:\Users\<you>\.claude\skills\doc-extract\scripts\_smoke_identity.py"   # ждём mismatches=0
+python "<home>\.claude\skills\doc-extract\scripts\_smoke_identity.py"   # ждём mismatches=0
 ```
 
 ## Регенерация
 
 Правка примитива → правишь `scripts/_spec_<mod>.md` → 
-`python C:\Users\<you>\.claude\skills\workflow\scripts\gen_code.py scripts\_spec_<mod>.md scripts\doc_extract\<mod>.py`
+`python <home>\.claude\skills\workflow\scripts\gen_code.py scripts\_spec_<mod>.md scripts\doc_extract\<mod>.py`
 (IRON MODE: код пишет Ollama, не Claude) → прогнать `_smoke_identity.py`.

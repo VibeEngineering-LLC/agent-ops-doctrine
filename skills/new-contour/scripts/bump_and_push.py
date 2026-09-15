@@ -3,7 +3,7 @@
 
 Auto-push policy is operator-pre-authorized: every SemVer bump is an explicit
 intent gate (you ran this script — that IS the «yes»). Push goes to the remote
-already configured on the repo (typically Verter73/claude-skills, private).
+already configured on the repo (typically <owner>/claude-skills, private).
 
 Usage:
   python scripts/bump_and_push.py --bump patch --note "fix watcher heartbeat dedup race"
@@ -11,7 +11,7 @@ Usage:
   python scripts/bump_and_push.py --bump major --note "breaking: register.py args renamed"
 
 Repo layout: this skill lives at `<repo-root>/new-contour/`, alongside other
-sibling skills in `Verter73/claude-skills` (the private multi-skill collection).
+sibling skills in `<owner>/claude-skills` (the private multi-skill collection).
 Tags are PER-SKILL namespaced — `new-contour/v1.2.3` — so this skill releases on
 its own cadence without colliding with other skills' tag namespace.
 

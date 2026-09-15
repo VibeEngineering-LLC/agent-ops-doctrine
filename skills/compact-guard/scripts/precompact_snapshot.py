@@ -28,7 +28,7 @@ try:
     # Хук получает JSON-payload от Claude Code через stdin. На cp1251-консоли
     # Windows sys.stdin по умолчанию декодирует НЕ как UTF-8 -> кириллица в
     # cwd/путях превращается в суррогаты -> падение при записи файла
-    # (найдено 2026-08-15 на реальном срабатывании, cwd содержал "Цензор").
+    # (найдено 2026-08-15 на реальном срабатывании, cwd содержал "надзорный").
     sys.stdin.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
@@ -239,6 +239,29 @@ def prune_old(keep: int = MAX_SNAPSHOTS_KEEP) -> None:
         pass
 
 
+def session_state_age(cwd: str) -> str:
+    """#CMP-1 (2026-08-26): свежесть SESSION-STATE.md на момент сжатия.
+
+    Снапшот хранит МЕХАНИКУ; замысел живёт в SESSION-STATE.md. Если тот устарел,
+    после сжатия это уже не восстановить — значит сказать об этом надо ЗДЕСЬ,
+    до потери контекста, а не в postcompact-хуке (там поздно).
+    """
+    try:
+        import time
+        p = os.path.join(cwd or ".", "SESSION-STATE.md")
+        if not os.path.isfile(p):
+            return "**ОТСУТСТВУЕТ** — замысел сессии нигде не зафиксирован, восстанавливать только из снапшота и транскрипта"
+        hours = (time.time() - os.path.getmtime(p)) / 3600.0
+        if hours < 1:
+            return f"обновлён {int(hours * 60)} мин назад — свежий"
+        if hours < 6:
+            return f"обновлён {hours:.1f} ч назад"
+        return (f"**УСТАРЕЛ на {hours:.1f} ч** — всё, что сделано за этот срок, в нём НЕ отражено; "
+                "после сжатия проверять состояние фактом (командой/чтением файла), не по памяти")
+    except Exception:
+        return "не удалось проверить"
+
+
 def build_markdown(payload: dict, collected: dict, git: dict, ts: str) -> str:
     trigger = payload.get("trigger", "?")
     session_id = payload.get("session_id", "?")
@@ -251,6 +274,7 @@ def build_markdown(payload: dict, collected: dict, git: dict, ts: str) -> str:
         ctx_str = f"~{ctx_k}k токенов"
 
     compact_seen_str = "да" if collected["compact_seen"] else "нет"
+    state_age = session_state_age(payload.get("cwd") or "")
 
     user_msgs = "\n".join(f"> {msg}" for msg in collected["user_msgs"])
     if not user_msgs:
@@ -283,6 +307,7 @@ def build_markdown(payload: dict, collected: dict, git: dict, ts: str) -> str:
 - **Рабочая папка:** {cwd}
 - **Контекст на момент сжатия:** {ctx_str}
 - **Сессия уже сжималась ранее:** {compact_seen_str}
+- **SESSION-STATE.md (замысел):** {state_age}
 
 ## Последние указания оператора (дословно, свежие внизу)
 {user_msgs}

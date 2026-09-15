@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Доля пика в энергетическом окне</title>
+<style>
+:root { color-scheme: light; }
+body { font-family: "Segoe UI", Calibri, "Helvetica Neue", sans-serif;
+       font-size: 17px; line-height: 1.62; color: #222;
+       max-width: 1100px; margin: 0 auto; padding: 40px 56px; background: #fff; }
+h1 { font-size: 30px; font-weight: 600; margin: 0 0 18px; }
+h2 { font-size: 23px; font-weight: 600; margin: 34px 0 12px;
+     border-bottom: 2px solid #2f5b8f; padding-bottom: 4px; }
+h3 { font-size: 19px; font-weight: 600; margin: 24px 0 8px; color: #2f5b8f; }
+h4 { font-size: 1em; font-weight: 600; margin: 18px 0 6px; color: #444; }
+p, li, dd { text-align: justify; text-justify: inter-word;
+           -webkit-hyphens: auto; -ms-hyphens: auto; hyphens: auto;
+           orphans: 2; widows: 2; }
+td { text-align: left; }
+li { margin-bottom: 4px; }
+ul, ol { padding-left: 26px; }
+table { border-collapse: collapse; width: 100%; margin: 14px 0 22px;
+        display: block; overflow-x: auto; }
+th { background: #2f5b8f; color: #fff; text-align: left; padding: 7px 11px;
+     font-weight: 600; font-size: 0.93em; }
+td { border: 1px solid #c9d4e0; padding: 7px 11px; vertical-align: top; font-size: 0.93em; }
+tr:nth-child(even) td { background: #f3f6fa; }
+code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.87em;
+       background: #f0f0ec; padding: 0 4px; border-radius: 3px; }
+pre { background: #f6f6f2; border: 1px solid #ddd; border-radius: 6px;
+      padding: 12px 16px; overflow-x: auto; }
+pre code { background: none; padding: 0; font-size: 0.85em; }
+blockquote { border-left: 4px solid #d9a62e; background: #fdf6e3;
+             margin: 16px 0; padding: 8px 16px; }
+blockquote p { margin: 6px 0; }
+img { max-width: 100%; height: auto; }
+hr { border: none; border-top: 1px solid #ccc; margin: 28px 0; }
+a { color: #2f5b8f; }
+sup { line-height: 0; }
+.toc { background: #f7f9fc; border: 1px solid #dbe3ec; border-radius: 6px;
+       padding: 10px 18px; margin: 0 0 26px; font-size: 0.95em; }
+.toc ul { margin: 6px 0; }
+.footnote { font-size: 0.9em; color: #555; border-top: 1px solid #ddd; margin-top: 32px; }
+@media (max-width: 1000px) { body { padding: 24px 18px; } }
+@media print {
+  body { max-width: none; padding: 0; font-size: 11pt; }
+  h1, h2, h3, h4 { page-break-after: avoid; }
+  table, pre, blockquote, img { page-break-inside: avoid; }
+  a { color: #000; text-decoration: none; }
+  @page { margin: 20mm 18mm; }
+}
+</style>
+</head>
+<body>
+<h1 id="_1">Доля пика в энергетическом окне</h1>
+<p>Справка-пример к скиллу <code>md-doc</code>. Показывает все элементы вёрстки на реальном материале: заголовки трёх уровней, таблицы, списки, цитату первоисточника, блок кода, формулы и русскую типографику. Числа проверены расчётом 31 июля 2026 года, происхождение указано в каждом случае.</p>
+<h2 id="1">1. Постановка</h2>
+<p>Область спектра шириной Δ вокруг линии полного поглощения захватывает не весь пик, а его часть. Доля определяется отношением полуширины окна к стандартному отклонению гауссиана:</p>
+<p><strong>f = erf( Δ / (σ√2) )</strong>, где σ = ПШПВ / 2,3548, ПШПВ = R · E / 100.</p>
+<p>Величина конфигурационно зависима: она определяется разрешением детектора R и шириной окна, а не свойствами нуклида. Единого «характерного» значения не существует — это и есть главный практический вывод.</p>
+<h3 id="11">1.1. Расчёт для типового случая</h3>
+<p>При энергии 662 кэВ и окне 5 % от энергии полуширина составляет 16,55 кэВ. Дальше всё решает разрешение:</p>
+<table>
+<thead>
+<tr>
+<th>Разрешение R</th>
+<th>ПШПВ, кэВ</th>
+<th>σ, кэВ</th>
+<th>x = Δ/(σ√2)</th>
+<th>f</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7,0 %</td>
+<td>46,34</td>
+<td>19,68</td>
+<td>0,5947</td>
+<td>0,600</td>
+</tr>
+<tr>
+<td>7,5 %</td>
+<td>49,65</td>
+<td>21,08</td>
+<td>0,5552</td>
+<td>0,567</td>
+</tr>
+<tr>
+<td>8,0 %</td>
+<td>52,96</td>
+<td>22,49</td>
+<td>0,5205</td>
+<td>0,538</td>
+</tr>
+</tbody>
+</table>
+<p>Разница между первой и второй строкой — половина процента разрешения — даёт расхождение в результате на 6 %. Именно на этом месте в стороннем документе трижды правили третий знак, не заметив, что умолчание инструмента равно 7,5 %, а не 7 %.</p>
+<h3 id="12">1.2. Диапазон по реальным конфигурациям</h3>
+<ul>
+<li>В поставочных наборах областей окна на 662 кэВ составляют 17…30 % от энергии, и там f = 0,995…1,000 — на результат практически не влияет.</li>
+<li>Единственная область шириной 5 % относится к линии 1460 кэВ, для неё f = 0,788.</li>
+<li>По парку детекторов с разрешением от 0,20 до 15,08 % величина лежит в пределах 0,304…1,000.</li>
+</ul>
+<p>Отсюда правило: <strong>прежде чем называть число, установить, от чего оно зависит и каков разброс.</strong> Спор о третьем знаке при разбросе втрое — признак, что проверяют не то.</p>
+<h2 id="2">2. Проверка расчёта</h2>
+<p>Воспроизводится тремя строками:</p>
+<pre><code class="language-python">import math
+d, R, E = 0.05 * 662 / 2, 7.0, 662.0        # полуширина окна, разрешение, энергия
+s = R / 100 * E / 2.3548                     # ПШПВ -&gt; сигма
+print(round(math.erf(d / (s * math.sqrt(2))), 4))   # 0.5997
+</code></pre>
+<h2 id="3">3. Первоисточник</h2>
+<p>Связь коэффициента активности с эффективностью и квантовым выходом подтверждена документацией разработчика спектрометрического ПО:</p>
+<blockquote>
+<p>«𝑤 = 1/(𝜀 𝐼/100)»</p>
+<p>— Алгоритмические основы, физическая страница 18 (печатная 6-2)</p>
+</blockquote>
+<p>Формула совпадает с реализацией в коде: <code>ROIConfigForm.cs:957</code> и <code>EnergySpectrumView.cs:740</code>.</p>
+<h2 id="4">4. Что проверять при использовании</h2>
+<ol>
+<li>Установить фактическое умолчание ширины окна в инструменте, а не предполагать его.</li>
+<li>Взять разрешение конкретного детектора, а не типовое для класса.</li>
+<li>Проверить, какой примитив вычитания задан: вычитание фонового спектра и метод Ковелла снимают разные вклады.</li>
+<li>Если разброс f по рабочим конфигурациям перекрывает спорную величину — числа в тексте быть не должно, только формула с диапазоном.</li>
+</ol>
+<hr />
+<p><em>Пример подготовлен скиллом <code>md-doc</code>. Исходник — <code>example/example.md</code> в дереве скилла, сборка — <code>md2html.py --nbsp --toc</code>.</em></p>
+</body>
+</html>

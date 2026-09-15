@@ -143,7 +143,7 @@ If A2 discovers it needs to edit `src/peaks.py` mid-task, it writes
 > procedural rule to ensure such bottlenecks do not occur again, either in
 > this session or future ones.
 
-Source: SpectraVibe `CLAUDE.md` §"Throughput rule — FILL THE FLEET (HARD-LOCK 2026-06-04)" lines 196-261.
+Source: спектрометрия `CLAUDE.md` §"Throughput rule — FILL THE FLEET (HARD-LOCK 2026-06-04)" lines 196-261.
 
 **Applicability**: Phase 1 + Phase 2. In Phase 3/4 — review-gated, rule does not apply.
 
@@ -207,7 +207,7 @@ then orchestrator stops. Without explicit command — fleet is always full.
 > «настрой автовыгрузку на гит при значительных изменениях. мелкие релизы
 >  архивируй локально».
 
-Source: SpectraVibe `CLAUDE.md` §"Release publishing strategy — two-tier auto-push (HARD-LOCK 2026-06-04)" lines 141-194.
+Source: спектрометрия `CLAUDE.md` §"Release publishing strategy — two-tier auto-push (HARD-LOCK 2026-06-04)" lines 141-194.
 
 **Tier 1 — Significant changes → auto-push to GitHub**:
 - **Minor bumps** (`vX.Y.0`): `v1.22.0`, `v1.23.0`, `v2.0.0`, … — closing
@@ -234,7 +234,7 @@ Source: SpectraVibe `CLAUDE.md` §"Release publishing strategy — two-tier auto
 - **Patch bumps** (`vX.Y.Z`, Z ≥ 1): `v1.22.1`, `v1.22.2`, … —
   hot-fixes, single-bug fixes, doc-only updates.
 - Do NOT push to `origin/master`, do NOT create GH release.
-- `1_Version/vX.Y.Z/SpectraVibe_vX.Y.Z.zip` stays local.
+- `1_Version/vX.Y.Z/спектрометрия_vX.Y.Z.zip` stays local.
 - Local git commit + local tag — yes (for history / git revert).
 
 **Rationale**: Phase 1 + Phase 2 — high frequency patches (several per day

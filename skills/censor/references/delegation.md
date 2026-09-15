@@ -2,7 +2,7 @@
 
 Читай этот файл, когда нужно решить «отдать на Ollama / субагента или делать
 самому» и как именно вызвать Ollama. Полная политика — в `~/.claude/CLAUDE.md`
-(Local-First). Здесь — операционная выжимка для роли Цензора.
+(Local-First). Здесь — операционная выжимка для роли надзорного контура.
 
 ## Pre-flight перед КАЖДЫМ Agent()/Workflow/большим Read
 
@@ -49,12 +49,12 @@ response = guarded_generate(
 )
 ```
 
-Эталон guard'а: `C:\Users\<you>\.claude\skills\workflow\scripts\vram_guard_reference.py`.
+Эталон guard'а: `<home>\.claude\skills\workflow\scripts\vram_guard_reference.py`.
 **Подключается ИМПОРТОМ, не копией** (§33; практика копирования отменена миграцией
 2026-08-28/29 — 17 путей с копиями сведены к импорту, расхождения версий были прямым
 следствием копий):
 ```python
-sys.path.insert(0, r"C:\Users\<you>\.claude\skills\workflow\scripts")
+sys.path.insert(0, r"<home>\.claude\skills\workflow\scripts")
 from vram_guard_reference import guarded_generate
 ```
 Копия в проекте (`scripts/ollama/_vram_guard.py` и любая другая) — дефект, а не вариант.

@@ -1,5 +1,15 @@
 # cc-interchat-bus — the cross-contour protocol
 
+> ⛔ **ЗАКРЫТО 2026-08-16 решением оператора («шина не нужна»). Историческая справка,
+> НЕ инструкция.** Действующий межсессионный канал — файловый ящик **#BUS-2**: письмо
+> файлом в `<work-root>\_interchat\inbox\<папка-получателя>\`,
+> `send_message` только дублем; ни `sent`, ни `queued` доставку не подтверждают.
+> Механика — `~/.claude/references/interchat-channel.md`, адресаты —
+> `_interchat\REGISTRY-adresatov.md`. Ничего из описанного ниже на новом контуре
+> не поднимать: `watch.py`, `register.py`, `watchdog.py`, `bus_lib.py` не работают
+> и работать не должны. Файл сохранён, чтобы читались история инцидентов и старые
+> скрипты.
+
 This file documents the **bus** that the `new-contour` skill onboards a chat onto.
 Read it before editing any script in this skill; the schemas here are the contract
 every contour (censor, gamma, finance, secretary, webmaster, and now yours) speaks.
@@ -43,17 +53,17 @@ Filename: `<fname_ts>__<id>.json` where `fname_ts` is `YYYY-MM-DDTHH-MM-SS-fffff
 
 ```json
 {
-  "id": "542d1473bffd49a8b3494a8edd283ed8",
+  "id": "<msg-id>",
   "ts": "2026-06-06T09:18:42.123456Z",
   "from": "censor",
   "to": "gamma",
   "type": "ack",
   "subject": "ACK CONDITIONAL GO TCS#47",
   "body": "...full UTF-8 body, may include markdown, may include code blocks...",
-  "refs": ["fa597508976fc20041283ded839b7337", "agent-a-math:aae18fd5721f2a546"],
+  "refs": ["<parent-msg-id>", "<agent-id>"],
   "action_class": "read-only",
   "requires_operator": false,
-  "in_reply_to": "fa597508976fc20041283ded839b7337"
+  "in_reply_to": "<parent-msg-id>"
 }
 ```
 

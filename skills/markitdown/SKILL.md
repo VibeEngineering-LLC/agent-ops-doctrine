@@ -22,7 +22,7 @@ xlsx. Вместо ad-hoc парсера на ходу — `markitdown`.
 | Случай | Чем делать |
 |---|---|
 | OCR скан rus+eng, legacy `.doc/.ppt/.rtf` | скилл `doc-extract` |
-| Семантический поиск по личным докам | скилл `docs-rag` |
+| Семантический поиск по личным докам | приватный RAG-скилл (не публикуется) |
 | Спецификация из чертежей | скилл `drawings-spec` |
 | СОЗДАНИЕ/правка документов с форматированием | `docx`/`xlsx`/`pptx`/`pdf` (markitdown только читает→md, писать не умеет) |
 
@@ -59,7 +59,7 @@ NB: дочерний процесс `markitdown-mcp` наследует PATH о�
 |---|---|
 | CLI | `C:\Users\<you>\.local\bin\markitdown.exe` |
 | MCP-server shim | `C:\Users\<you>\.local\bin\markitdown-mcp.exe` |
-| MCP-конфиг (Claude Code) | `C:\Users\<you>\.claude.json` → корневой `mcpServers.markitdown` (scope user, type stdio) |
+| MCP-конфиг (Claude Code) | `<home>\.claude.json` → корневой `mcpServers.markitdown` (scope user, type stdio) |
 | Исходник MCP-инструмента | `C:\Users\<you>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\uv\tools\markitdown-mcp\Lib\site-packages\markitdown_mcp\__main__.py` |
 | ffmpeg `bin` | см. раздел «Аудио / ffmpeg» |
 
@@ -90,9 +90,9 @@ ffmpeg: `winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept
 - ffmpeg: winget-лог 2026-06-19 «Успешно установлено»; `ffmpeg.exe -version` → `ffmpeg version 8.1.1-full_build-www.gyan.dev`.
 
 ## Хранение скилла (политика §20 глобального CLAUDE.md)
-- **Реальная папка:** `<your-shared-drive-root>\Skills\markitdown\` (бэкап Google Drive) + локальный git + GitHub.
-- **Загрузка Claude Code:** `C:\Users\<you>\.claude\skills\markitdown` — **junction** на папку выше (Claude Code грузит по C-пути, данные физически на D:).
+- **Реальная папка:** `<work-root>\Skills\markitdown\` (бэкап Google Drive) + локальный git + GitHub.
+- **Загрузка Claude Code:** `<home>\.claude\skills\markitdown` — **junction** на папку выше (Claude Code грузит по C-пути, данные физически на D:).
 - Пересоздать junction при необходимости:
   ```
-  New-Item -ItemType Junction -Path "C:\Users\<you>\.claude\skills\markitdown" -Target "<your-shared-drive-root>\Skills\markitdown"
+  New-Item -ItemType Junction -Path "<home>\.claude\skills\markitdown" -Target "<work-root>\Skills\markitdown"
   ```

@@ -22,17 +22,12 @@ description: >-
 
 This skill manages **workflow templates** — declarative YAML configs that describe agent roles, model assignments, Ollama delegation rules, concurrency policies, and messaging conventions. It renders project-specific `AGENTS.md` files from a single source of truth so settings stay synchronized across many projects.
 
-Source repository: https://github.com/Verter73/claude-skills (this skill lives as the `workflow/`
+Source repository: the operator's private `<owner>/claude-skills` (this skill lives as the `workflow/`
 subfolder of that mono-repo — synced skills share one repo per doctrine §13/§14, not a
-repo-per-skill layout). Local clone: `C:\Users\<you>\.claude\skills-sync\claude-skills\workflow\`.
-(An older standalone repo `Verter73/claude-workflow-skill` no longer exists on GitHub — a local
+repo-per-skill layout). Local clone: `<home>\.claude\skills-sync\claude-skills\workflow\`.
+(An older standalone repo `<owner>/claude-workflow-skill` no longer exists on GitHub — a local
 clone of it at `C:\Users\<you>\claude-workflow-skill\` is a stale artifact, not a second source of
-truth; corrected 2026-08-23 after an internal false-alarm trace to it.)
-
-Some benchmark/incident citations below name the internal agent-contour that produced the
-measurement (e.g. "the Codeaudit contour", "the GEANT4 contour") — these are the operator's own
-project-specific automation agents, kept only as provenance for the numbers, not third-party
-brands.
+truth; corrected 2026-08-23 after LLM/надзорный contours traced a "missing repo" false alarm to it.)
 
 ## Scope & host assumptions
 
@@ -47,12 +42,12 @@ personal toolkit" 2026-06-05). Revisit ALL of it before using on another machine
 - **RTX 4090, 24 GB VRAM.** The `SYSTEM_RESERVE_MB`, per-role `num_ctx`
   profiles, and the single-model policy are calibrated to exactly this ceiling.
   A larger-footprint model (e.g. `qwen3.6:latest` at ~23 GB on disk) would not
-  stay GPU-resident here — it would force CPU fallback (~10×) or OOM. That is
+  stay GPU-resident here — it would spill to CPU (forbidden, #CPU-1) or OOM. That is
   why `qwen3-coder:30b` is the locked generative default, not a bigger general
   model.
 - **Imported HARD-LOCK rules.** Several policies (FILL THE FLEET, two-tier
   release publishing, etc.) are imported verbatim from specific projects
-  (SpectraVibe) and the operator's global `~/.claude/CLAUDE.md`. They encode
+  (спектрометрия) and the operator's global `~/.claude/CLAUDE.md`. They encode
   **this operator's** decisions, not universal best practice.
 
 On different hardware / models / OS, revisit the VRAM constants
@@ -98,9 +93,9 @@ For `bootstrap` you must always ask the user (or infer) the **cost tier** (`ECON
 
 > Every workflow in this skill ships with an `ollama:` block that is no longer advisory — it is the standing policy. Per user's global `~/.claude/CLAUDE.md` "Local-First (Ollama) — MAXIMUM delegation" section (locked 2026-06-03 after a verified smoke-test 20/20 entries, 0 fabrications), Claude tokens are reserved for synthesis, decisions, and tool calls. Routine extraction / classification / templated generation goes to local Ollama.
 >
-> **Model policy, operator decision 2026-08-23 late evening — TWO models kept available, selected by quality.** This supersedes the same-evening single-default trial, whose hard block on `qwen3-coder:30b` is now cleared (the block's first practical cost was the GEANT4 contour losing a codegen round — LLM contour P-002).
+> **Model policy, operator decision 2026-08-23 late evening — TWO models kept available, selected by quality.** This supersedes the same-evening single-default trial, whose hard block on `qwen3-coder:30b` is now cleared (the block's first practical cost was the моделирование contour losing a codegen round — LLM contour P-002).
 >
-> Measured by the Codeaudit contour (`BENCH-V2-2026-08-23.md`, 4-seed paired bootstrap, p<0.001). Score = quality (higher better); cost = wall-clock ÷ score (lower better):
+> Measured by the аудит-кода contour (`BENCH-V2-2026-08-23.md`, 4-seed paired bootstrap, p<0.001). Score = quality (higher better); cost = wall-clock ÷ score (lower better):
 >
 > | Class | score q3.6 / coder | cost q3.6 / coder |
 > |---|---|---|
@@ -138,7 +133,7 @@ class; local wall-clock is not a selection criterion per operator instruction). 
 
 If all four are NO, the task belongs to Claude / a Claude subagent.
 
-**`format='json'` batch caveat (Codeaudit finding, 2026-08-23):** Ollama's grammar-constrained
+**`format='json'` batch caveat (аудит-кода finding, 2026-08-23):** Ollama's grammar-constrained
 JSON mode stops generation after the FIRST object on multi-item output — confirmed 0.00 score
 across all 5 fleet models on a 200-item batch (13 tokens produced vs 2893 needed), correct only
 without `format`. Use `format='json'` ONLY for a single-object response; for any list/array of
@@ -276,11 +271,11 @@ r = requests.post('http://127.0.0.1:11434/api/generate', json={
 result = json.loads(r.json()['response'])
 ```
 
-## Pre-flight VRAM guard & three-tier Ollama fallback
+## Pre-flight VRAM guard & GPU-only Ollama dispatch
 
-Full reference (two-layer VRAM guard, per-role `num_ctx` profiles, three-tier
-GPU/queue/CPU fallback, cross-chat queue, drop-out triggers, CPU-mode RAM,
-priority classes, anti-pattern guards): **`SKILL_VRAM_GUARD.md`**. Key invariant:
+Full reference (two-layer VRAM guard, per-role `num_ctx` profiles, GPU → queue →
+loud failure — Ollama on CPU is forbidden, #CPU-1 — cross-chat queue, drop-out
+triggers, priority classes, anti-pattern guards): **`SKILL_VRAM_GUARD.md`**. Key invariant:
 every Ollama helper calls `guarded_generate()` (never raw `requests.post`) so the
 machine-global queue engages and OOM races are prevented — see
 `scripts/vram_guard_reference.py`.
@@ -309,36 +304,39 @@ The `multi-agent-strategist` §5.2 also carries a worked anti-pattern (real 2026
 > killed with partial work. Without `guarded_generate()`, the machine-global queue does not engage
 > and OOM races cannot be prevented.
 
-All Ollama-helper scripts in consuming projects MUST import
-`guarded_generate` from `_vram_guard.py` (copied as `scripts/ollama/_vram_guard.py`
-or `audit/_drafts/_ollama_helpers/_vram_guard.py` per project layout).
+All Ollama-helper scripts in consuming projects MUST **import** `guarded_generate`
+from the canonical file by absolute path — **never copy it** (§33: a copy as the
+normal way of connecting is a defect; 2026-08-28 drift: 18 stale copies, several of
+them still falling back to CPU, which is now forbidden — #CPU-1).
 
 **Mandatory pattern**:
 
 ```python
-from _vram_guard import guarded_generate
+import sys
+sys.path.insert(0, r"<home>\.claude\skills\workflow\scripts")
+from vram_guard_reference import guarded_generate, VramGuardFailure, GUARD_VERSION
 response = guarded_generate(
-    model='qwen3-coder:30b',
+    model='qwen3.6:27b',
     prompt='...',
-    want_gpu=True,
     priority=50,        # orchestrator=100, subagent=50, batch=10
     max_wait_s=600,
-    options={'temperature': 0, 'num_ctx': 32768, 'format': 'json'},
+    fmt='json', temperature=0, num_ctx=32768,   # there is NO `options=` kwarg
 )
 ```
 
 Raw `requests.post('http://127.0.0.1:11434/api/generate', ...)` is FORBIDDEN
 except in:
 (a) single-shot diagnostic snippets in Bash (≤30 lines), explicitly documented as ad-hoc with docstring «queue bypass acceptable, no concurrent caller»;
-(b) the `_vram_guard.py` implementation itself (it is the wrapper).
+(b) the `vram_guard_reference.py` implementation itself (it is the wrapper).
 
 **Subagent brief checklist enforcement**: every subagent brief mentioning Ollama MUST contain
-the literal phrase `from _vram_guard import guarded_generate`. If the phrase is absent — the
+the literal phrase `from vram_guard_reference import guarded_generate`. If the phrase is absent — the
 brief is illegitimate; the orchestrator rewrites it before dispatch.
 
-**Reference implementation**: `~/claude-workflow-skill/scripts/vram_guard_reference.py`
-(896 lines, copied into consuming projects as `audit/_drafts/_ollama_helpers/_vram_guard.py`
-or `scripts/ollama/_vram_guard.py`).
+**Reference implementation**: `<home>\.claude\skills\workflow\scripts\vram_guard_reference.py`
+(imported, not copied; `python vram_guard_reference.py --version` prints `GUARD_VERSION`).
+A copy is allowed only where import is impossible (other machine / runtime) — then with
+the original path and date in its header, and it must be diffed against `--version`.
 
 ### IRON MODE enforcement hooks (`~/.claude/hooks/`)
 
@@ -541,8 +539,12 @@ renders it into `AGENTS.md` §3 of each bootstrapped project.
 
 | Threshold      | Action                                      | Why                                      |
 |---|---|---|
-| 60-65% fill    | `/compact`                                  | Summarize working state, keep momentum   |
-| 75%+ fill      | `/clear` + re-prime with a sharper prompt   | Past 75% degradation is sharp            |
+| ~80% fill      | update `SESSION-STATE.md` first, then `/compact` | Summarize working state, keep momentum |
+| 90%+ fill      | `/clear` + re-prime with a sharper prompt   | Past 90% degradation is sharp            |
+
+Percentages are of the auto-compact threshold (~967k on 1M-window models), per
+global `CLAUDE.md` §6 #CTX-1 (2026-08-14). The old 60/75% values were written for
+a 200k window and choke a 1M window at ~45% of capacity.
 
 ### Two-correction rule
 

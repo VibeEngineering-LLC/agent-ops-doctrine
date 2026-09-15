@@ -1,14 +1,20 @@
-# SKILL reference — VRAM guard & three-tier Ollama fallback
+# SKILL reference — VRAM guard & GPU-only Ollama dispatch
 
 > Reference material split out of `SKILL.md` (T-16) to keep the skill
 > dispatcher thin. Loaded on demand when a helper needs the full VRAM-guard
-> / queue / CPU-fallback details. The canonical implementation lives in
-> `scripts/vram_guard_reference.py`.
+> / queue / loud-failure details. The canonical implementation lives in
+> `scripts/vram_guard_reference.py` (v1.9.3).
+>
+> **Ollama on CPU is FORBIDDEN (#CPU-1, operator 2026-08-28 / 2026-09-14)** — for every
+> call type (`generate`/`chat`/`embed`): no `num_gpu: 0`, no `try_cpu()`, no
+> `want_gpu=False`, no automatic fallback, no partial layer offload. No GPU → queue /
+> unload an idle model / loud `VramGuardFailure`. Code that *can* reach CPU is a
+> violation even if not currently called.
 
 ### Pre-flight check — two-layer VRAM guard
 
 Before invoking Ollama, helper scripts should verify resource availability to fail-fast
-rather than silently OOM or fall back to CPU with a 10× slowdown.
+rather than silently OOM or land on CPU (forbidden, #CPU-1).
 
 Two complementary layers, used together:
 
@@ -23,7 +29,7 @@ its profile (forge/guard/math/archive).
 2. `nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits` → free VRAM in MB.
 3. If `model_already_loaded` → skip VRAM check (will reuse).
 4. Else require `vram_free_gb >= PROFILE_MIN_VRAM_GB[profile]`:
-   - `forge` (32k): 0 GB (CPU fallback acceptable)
+   - `forge` (32k): model estimate, never 0 GB (CPU is forbidden, #CPU-1; the old "CPU fallback acceptable" value is withdrawn)
    - `forge-large` / `guard` (64k): 10 GB
    - `math` / `archive` (128k): 14 GB
 5. Return `{ok: bool, reason: str, vram_free_gb: float, loaded: bool, model_already_loaded: bool}`.
@@ -33,7 +39,7 @@ its profile (forge/guard/math/archive).
 - RECOMMENDED for batch loops (>5 sequential Ollama calls).
 - SKIP for routine forge (32k) single-shot calls.
 
-#### Layer 2 — fine per-model guard (`_vram_guard.py`)
+#### Layer 2 — fine per-model guard (`vram_guard_reference.py`, imported — never copied)
 
 Per-model VRAM estimate + **system reserve** subtracted from free VRAM, with **neighbour-process
 diagnosis** (distinguishes "another Ollama model holds VRAM" from "non-Ollama GPU process holds VRAM"
@@ -41,7 +47,7 @@ from "absolute shortage"). Added 2026-06-04 after a verified field incident: a n
 `qwen2.5vl:7b` + `qwen3-coder:30b` together exceeded 24 GB RTX 4090, causing three dispatched
 subagents to return 0-byte outputs (silent OOM during `/api/generate`).
 
-**Pattern** (reference implementation: gamma-spectrum-analysis `audit/_drafts/_ollama_helpers/_vram_guard.py`):
+**Pattern** (reference implementation: `<home>\.claude\skills\workflow\scripts\vram_guard_reference.py`; the historical gamma-spectrum-analysis `_drafts` copy is a stale #CPU-1 violator — do not use):
 
 1. Probe free/used/total VRAM via `nvidia-smi --query-gpu=memory.{total,used,free}`.
 2. Probe currently-loaded Ollama models via `GET /api/ps`.
@@ -59,7 +65,7 @@ subagents to return 0-byte outputs (silent OOM during `/api/generate`).
 |---|---:|---|
 | `SYSTEM_RESERVE_MB` | 3 000 | OS compositor (~1-1.5 GB) + browser GPU (~0.5-1 GB) + ~1 GB generative slack (KV growth mid-call, allocator fragmentation) |
 | `MODEL_VRAM_ESTIMATE_MB["qwen3-coder:30b"]` | 17 500 | 30.5B Q4_K_M (~17.9 GB weights) + small MoE KV at 32k ≈ 17.5 GB resident. Override to ~22 500 for math 128k q8_0. |
-| `MODEL_VRAM_ESTIMATE_MB["qwen3.6:27b"]` | 17 800 | 27.8B Q4_K_M dense; measured resident 2026-08-22/23 (LLM contour + Codeaudit bench, both @ 32k). |
+| `MODEL_VRAM_ESTIMATE_MB["qwen3.6:27b"]` | 17 800 | 27.8B Q4_K_M dense; measured resident 2026-08-22/23 (LLM contour + аудит-кода bench, both @ 32k). |
 | `MODEL_VRAM_ESTIMATE_MB["qwen2.5vl:7b"]` | 7 000 | Vision-language; measured |
 | `MODEL_VRAM_ESTIMATE_MB["bge-m3:latest"]` | 1 500 | Embedding |
 
@@ -68,7 +74,7 @@ subagents to return 0-byte outputs (silent OOM during `/api/generate`).
 - `guarded_generate(model, prompt, **kwargs)` — drop-in for `requests.post('/api/generate')`
   that raises `VramGuardFailure` on FAIL (caller can `except VramGuardFailure` and fall back to Claude / a smaller model).
 - `wait_until_can_load(model, max_wait_s=120, poll_s=5)` — poll-and-retry variant for batch loops.
-- CLI: `python _vram_guard.py --check <model>` (exit 1 on FAIL, structured JSON to stdout),
+- CLI: `python vram_guard_reference.py --check <model>` (exit 1 on FAIL, structured JSON to stdout),
   `--watch` (continuous monitor), `--wait <sec>` (poll-and-emit).
 
 ### Thinking models — `think` parameter (added v1.9.0, 2026-08-23)
@@ -77,7 +83,7 @@ subagents to return 0-byte outputs (silent OOM during `/api/generate`).
 answer in Ollama's `thinking` response field, not `response`, whenever reasoning triggers —
 `format="json"` triggers it every time. A caller reading only `response` gets `""` back with
 `done=true` — a **silent failure**, no exception, no non-zero exit. Found independently by the
-Цензор contour (`_interchat` letter 2026-08-23) and reproduced by the LLM contour.
+надзорный contour (`_interchat` letter 2026-08-23) and reproduced by the LLM contour.
 
 **Second failure mode, found 2026-08-23 evening (LLM contour P-002 / W-004)**: on long codegen
 (`fmt=None`) reasoning eats the `num_predict` budget and the output is cut off mid-function with
@@ -92,7 +98,7 @@ building the payload — **on every call, regardless of `fmt`** (widened in v1.9
 `fmt=="json"` only in v1.9.0). Rationale: `guarded_generate()` exists to delegate mechanical
 work; reasoning is not what it is for, and callers who genuinely want it say so explicitly.
 This is the exact recipe independently verified by
-the Codeaudit contour (`hard_bench_text.py`, 26 calls, 0 load failures) and by a direct repro on
+the аудит-кода contour (`hard_bench_text.py`, 26 calls, 0 load failures) and by a direct repro on
 clean VRAM (LLM contour, 2026-08-23, `qwen3.6:27b`, 10.5 s, correct JSON). An earlier claim that
 `think=False` breaks model loading (`CUDA_Host buffer allocation failed`) did **not** reproduce on
 retest — recorded as LLM contour `work-incidents.md` W-002, do not resurrect that workaround.
@@ -104,8 +110,8 @@ risk — if you do, raise `num_predict` accordingly).
 ### Truncation warning (v1.9.1, 2026-08-23)
 
 Ollama reports `done_reason` on every `/api/generate` response; anything other than `"stop"`
-means the output was **cut off**, not finished. Both call paths (`_gpu_call` and `try_cpu`) now
-run `_warn_if_truncated()`, which prints a stderr warning naming the model and reason. Callers
+means the output was **cut off**, not finished. The GPU call path (`_gpu_call`; `try_cpu` removed in 1.9.3)
+runs `_warn_if_truncated()`, which prints a stderr warning naming the model and reason. Callers
 that write the result somewhere should check `done_reason` themselves and refuse to save a
 truncated body — `gen_code.py` v1.1 does exactly this (`exit 2`, writes nothing). Silently
 saving a half-file is the "output exists, therefore it worked" trap (§31.A #SA-3).
@@ -117,7 +123,7 @@ saving a half-file is the "output exists, therefore it worked" trap (§31.A #SA-
 - SKIP for embeddings on dedicated GPU (Layer 1 already sufficient).
 
 **Failure modes prevented**:
-- Layer 1 alone: model load attempt with insufficient VRAM falls back to CPU silently → 10× timeout blowout.
+- Layer 1 alone: model load attempt with insufficient VRAM lands on CPU silently (Ollama's own offload) → forbidden by #CPU-1 and a 10× timeout blowout.
 - Layer 2 adds: silent OOM crash when total VRAM demand from THIS process + neighbour processes > GPU capacity, even though Layer 1 saw "enough free VRAM" before the neighbour spiked. Layer 2's system reserve absorbs the spike; the neighbour-process diagnosis produces an actionable recommendation in the verdict (`"Wait for Ollama models [X, Y] to unload"` vs `"Non-Ollama processes hold N MB VRAM"` vs `"Fall back to Claude"`).
 
 #### Out of scope — co-resident desktop GPU starvation (host env mitigation)
@@ -148,7 +154,7 @@ restart the daemon). These live *outside* the guard:
 | Env var | Value | Effect |
 |---|---|---|
 | `OLLAMA_KEEP_ALIVE` | `5m` | Short idle TTL — the big model unloads during idle windows instead of pinning VRAM for 30m. |
-| `OLLAMA_GPU_OVERHEAD` | `4294967296` (4 GiB) | Ollama reserves desktop headroom and offloads partially to CPU before it can starve the GPU process. |
+| `OLLAMA_GPU_OVERHEAD` | `4294967296` (4 GiB) | Ollama reserves desktop headroom. **⚠ Side effect:** when a model + context does not fit into the rest, Ollama may silently offload some layers to CPU — a #CPU-1 violation. Guard ≥1.9.4 catches it after every call (`assert_fully_on_gpu()`: `/api/ps` `size_vram < size` → unload + `VramGuardFailure("partial_cpu_offload")`); the check is mandatory for any path that calls Ollama without `guarded_generate()` (embed/chat). |
 | `OLLAMA_MAX_LOADED_MODELS` | `1` | Concurrent loads can't spike VRAM. |
 
 This is **complementary to, not a replacement for, the guard** — there is no
@@ -174,7 +180,7 @@ The rendered `AGENTS.md` §5.1 in every bootstrapped project contains the full p
 
 ## GPU-only Ollama fallback (v1.8.0+, CPU tier REMOVED v1.9.2 2026-08-28)
 
-Added in v1.8.0 (SpectraVibe Task 75D). Extended in v1.9.0 with FILL THE FLEET policy, two-tier publish strategy, and HARD RULE for guarded_generate(). **v1.9.2 (2026-08-28, operator instruction "проц запрещён" / "оллама только гпу"): the CPU tier is REMOVED from the automatic path.** `guarded_generate()` now raises `VramGuardFailure` whenever GPU is unavailable after the queue tier — it never silently falls to CPU. `try_cpu()` still exists in the module for explicit manual use; nothing in this skill calls it automatically anymore.
+Added in v1.8.0 (спектрометрия Task 75D). Extended in v1.9.0 with FILL THE FLEET policy, two-tier publish strategy, and HARD RULE for guarded_generate(). **v1.9.2 (2026-08-28, operator instruction "проц запрещён" / "оллама только гпу"): the CPU tier is REMOVED from the automatic path.** `guarded_generate()` now raises `VramGuardFailure` whenever GPU is unavailable after the queue tier — it never silently falls to CPU. `try_cpu()` still exists in the module for explicit manual use; nothing in this skill calls it automatically anymore.
 
 ### The pattern (current)
 
@@ -189,9 +195,9 @@ Tier 3 — Claude (caller): catch VramGuardFailure → retry, raise priority,
 
 **API entry point**: `guarded_generate(model, prompt, *, want_gpu=True, priority=50, max_wait_s=600, return_mode=False, ...)` — backward-compatible drop-in for `requests.post('/api/generate', ...)`. `return_mode=True` still returns `(response_dict, Literal['gpu', 'cpu'])` for signature compatibility, but the `'cpu'` branch is now unreachable via the automatic path — a failed GPU attempt raises instead of returning `'cpu'`.
 
-**Historical note (pre-2026-08-28 behaviour, kept for context):** the old Tier 3 CPU fallback (`num_gpu=0` + RAM check + 5× timeout) silently pinned a model to CPU whenever GPU headroom was tight — worse, `check_can_load()`'s `already_loaded` check didn't look at `size_vram`, so a model that fell to CPU once stayed "already loaded" forever, even after VRAM freed up (Программист W-019, `references/error-classes.md` C-003). Both defects are fixed together in v1.9.2: CPU is gone from the automatic path, and `already_loaded` now requires `size_vram > 0`.
+**Historical note (pre-2026-08-28 behaviour, kept for context):** the old Tier 3 CPU fallback (`num_gpu=0` + RAM check + 5× timeout) silently pinned a model to CPU whenever GPU headroom was tight — worse, `check_can_load()`'s `already_loaded` check didn't look at `size_vram`, so a model that fell to CPU once stayed "already loaded" forever, even after VRAM freed up (прикладное-ПО W-019, `references/error-classes.md` C-003). Both defects are fixed together in v1.9.2: CPU is gone from the automatic path, and `already_loaded` now requires `size_vram > 0`.
 
-Reference implementation: `scripts/vram_guard_reference.py` (copy to any project's `scripts/ollama/_vram_guard.py` or `audit/_drafts/_ollama_helpers/_vram_guard.py`).
+Reference implementation: `<home>\.claude\skills\workflow\scripts\vram_guard_reference.py` — **import it** via `sys.path.insert` (§33); do not copy it into projects (copies drift — 2026-08-28: 18 stale copies).
 
 ### Cross-chat machine-global queue
 
@@ -212,7 +218,7 @@ gives priority DESC + timestamp ASC without parsing.
 
 ### Drop-out triggers
 
-A waiter drops out of the queue and falls back to CPU when any of:
+A waiter drops out of the queue (GPU unavailable → `guarded_generate()` raises `VramGuardFailure`, never CPU) when any of:
 
 | Trigger | Default | kwarg to override |
 |---|---|---|
@@ -220,24 +226,15 @@ A waiter drops out of the queue and falls back to CPU when any of:
 | Elapsed time > T | T = 120 s | `drop_out_after_s=` |
 | Hard timeout | `max_wait_s` = 600 s | `max_wait_s=` |
 
-Return value on drop-out: `VramVerdict(ok=False, reason='queue_drop_out_cpu_recommended')`.
+Return value on drop-out: `VramVerdict(ok=False, reason='queue_drop_out_gpu_unavailable')`
+(hard timeout: `queue_timeout_gpu_unavailable`; before 1.9.3 both were named `*_cpu_recommended`).
 
-### CPU mode RAM requirements
+### CPU mode — REMOVED (1.9.3, 2026-09-14)
 
-`try_cpu(model, prompt, ...)` runs `num_gpu=0` with a 5× timeout (default 5 × 300 s = 1500 s).
-Before calling, it checks available system RAM:
-
-| Constant | Value |
-|---|---|
-| `MODEL_RAM_ESTIMATE_GB["qwen3-coder:30b"]` | 18 GB |
-| `MODEL_RAM_ESTIMATE_GB["qwen3.6:27b"]` | 19 GB |
-| `CPU_OS_RESERVE_GB` | 4 GB |
-| Minimum free RAM required | model_GB + 4 GB |
-
-If available RAM < minimum, `VramGuardFailure` is raised. If RAM is undetectable
-(`-1.0` from the probe chain), the mode is accepted permissively (trust the caller).
-
-RAM probe chain (zero new dependencies): `psutil` → `ctypes.GlobalMemoryStatusEx` (Windows) → `/proc/meminfo MemAvailable` (POSIX) → `-1.0` (permissive).
+`try_cpu()`, `MODEL_RAM_ESTIMATE_GB`, `CPU_OS_RESERVE_GB`, `_available_ram_gb()` and the
+`cpu_timeout_multiplier` kwarg are deleted. `guarded_generate(..., want_gpu=False)` raises
+`VramGuardFailure(reason="cpu_forbidden")` before any HTTP call. Copies of the guard that
+still define `try_cpu()` are #CPU-1 violations — replace them by importing the canonical file.
 
 ### Priority classes
 

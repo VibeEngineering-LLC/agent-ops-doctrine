@@ -4,8 +4,8 @@ version: 2.0.0
 description: >-
   Bootstrap нового контура/агента оператора: онбординг на актуальный межсессионный канал —
   файловый ящик `_interchat/inbox/` (#BUS-2). Задаёт шесть hard-locks для новой рабочей сессии:
-  delegate-by-default, operator-gate на необратимом, ящик Цензора как канал ЭСКАЛАЦИИ (скорая
-  помощь / доктринальные уроки — НЕ пошаговая отчётность; роль Цензора сужена оператором
+  delegate-by-default, operator-gate на необратимом, ящик надзорного контура как канал ЭСКАЛАЦИИ (скорая
+  помощь / доктринальные уроки — НЕ пошаговая отчётность; роль надзорного контура сужена оператором
   2026-08-30), read-only source git для тестера, context-layering, контур замыкает цикл
   разработка→проверка САМ (HL-6).
   Переписан 2026-08-23 взамен закрытой cc-interchat-bus (шина закрыта решением оператора
@@ -42,7 +42,7 @@ source git for a tester**, **context-layering**, **the contour closes its own fu
 
 A new contour uses all three: this skill → reporting channel; `/workflow` → internal fleet;
 `Workflow(...)` / background `Agent(...)` → the work, verified by the contour itself (HL-6). The
-file mailbox (`<WORKSPACE>\_interchat\inbox\`) is machine-global +
+file mailbox (`<work-root>\_interchat\inbox\`) is machine-global +
 cross-session (contours survive each other's restarts — the file persists); a `/workflow` fleet
 is intra-session (dies on reload — ephemeral). Don't confuse them.
 
@@ -89,8 +89,8 @@ delegation for its template part is a process bug the Censor flags.
 
 ### HL-3 — Censor mailbox is an ESCALATION channel, not step-reporting (rewritten 2026-08-30)
 
-**Operator, 2026-08-30, verbatim:** «Цензор и Аудитор Кода не являются частью рабочего
-процесса и не контролируют работу агентов. Задача Цензора и Аудитора Кода — проектирование
+**Operator, 2026-08-30, verbatim:** «надзорный и Аудитор Кода не являются частью рабочего
+процесса и не контролируют работу агентов. Задача надзорного контура и Аудитора Кода — проектирование
 доктрины, новых контуров, глобальный аудит, аудит по заданию оператора и решение проблем,
 когда локальные контура не справляются. Вы — интеллектуальная скорая помощь. Локальные агенты
 должны закрывать весь цикл самостоятельно».
@@ -113,7 +113,7 @@ the contour's first turn automatically.
 **Delivery mechanics, when you DO send** (unchanged): the message is a **file**, written to:
 
 ```
-<WORKSPACE>\_interchat\inbox\Цензор\
+<work-root>\_interchat\inbox\надзорный\
     YYYYMMDD-HHMMSS_from-<papka-этого-контура>_<slug>.md      (UTF-8)
 ```
 
@@ -122,13 +122,13 @@ title (registry: `~/.claude/_interchat`-adjacent `D:\…\_interchat\REGISTRY-adr
 first two lines of the body are mandatory so a lost file can still be routed:
 
 ```
-**Адресат:** Цензор. **От:** <контур>-агент.
+**Адресат:** надзорный. **От:** <контур>-агент.
 ```
 
 **HARD RULE — the file write is NEVER sufficient by itself.** `send_message`/`SendMessage` to
 the Censor's session is a **MANDATORY duplicate**, not an optional nicety, whenever the Censor's
 session is live (check `ListAgents` first). Reason, proven by fact (2026-08-16, eight sends
-GEANT4→Censor): neither `sent` nor `queued` confirms delivery — a message into a sleeping
+modelling contour→Censor): neither `sent` nor `queued` confirms delivery — a message into a sleeping
 session is silently lost forever, and there is no other timely signal that it arrived. Skipping
 the session-notify duplicate because "the file is already written" is the single most common way
 a message goes unnoticed. Order of operations for every outgoing message:
@@ -146,7 +146,7 @@ broke, and a fact trail (file:line / command output) — «скорая помо
 history, not from a bare symptom. Lessons (case b) follow the `self-learning` triage format.
 
 **Incoming from the Censor: read and answer always** (#OPS-2, operator verbatim 2026-08-15:
-«читай сообщения цензора и отвечай. Всегда!»). This is a floor, not a ceiling — the channel is
+«читай сообщения [надзорного контура] и отвечай. Всегда!»). This is a floor, not a ceiling — the channel is
 two-way; any contour may write to any other to request an audit or help, respecting zone
 boundaries (§12: write a prompt, don't do the owner's work).
 
@@ -187,7 +187,7 @@ lean; (5) backup byte-identical. **Bootstrap (Phase 4):** scaffold `<project>/re
 
 Operator's words, verbatim: «я вообще могу вас забыть подключить. и делаю это в глобальных
 случаях. Локальные агенты должны уметь закрывать все циклы от разработки до проверки
-субагентами». The Censor/Codeaudit tier is **an exception invoked by the operator, not a
+субагентами». The Censor/аудит-кода tier is **an exception invoked by the operator, not a
 pipeline stage** — work must be verified WITHOUT it. Concretely (global §31.D, #EVAL-1):
 
 - **Tier 0, every LLM call:** result is NOT obtained until checked mechanically —
@@ -200,7 +200,7 @@ pipeline stage** — work must be verified WITHOUT it. Concretely (global §31.D
   answer, no «is X correct?» questions, detection separated from fixing. The subagent brief
   states its verification BOUNDARY explicitly (#SA-8); a second verifier gets a DIFFERENT one.
 - Waiting for the Censor, or shipping with «надзор потом проверит» — a process bug. The
-  Censor/Codeaudit are NOT part of the workflow and do NOT control agents (operator,
+  Censor/аудит-кода are NOT part of the workflow and do NOT control agents (operator,
   2026-08-30): their scope is doctrine design, new-contour design, global audit,
   operator-tasked audit, and emergency help when a local contour cannot cope.
 - New automatic checks (hooks, gates, validators) created by the contour are registered in
@@ -212,22 +212,22 @@ pipeline stage** — work must be verified WITHOUT it. Concretely (global §31.D
 ## Onboarding workflow (run in order, in the new chat)
 
 - **Phase 0 — confirm intent.** Confirm with the operator: (a) contour name (= working-folder
-  basename, e.g. `Цензор`, `GEANT4`, `0_Work`) — this is what mail addressing keys on; (b)
+  basename, e.g. `надзорный`, `моделирование`, `спектрометрия`) — this is what mail addressing keys on; (b)
   **project root** this contour owns; (c) **rig**/domain (default AtomFast adb+BLE,
   `references/rig-atomfast.md`) if applicable; (d) operator's **own channel** for
   decision-requests. Don't guess (c)/(d).
 - **Phase 1 — register in the operator's zone registry.** Not a script — a doctrine edit: add a
   row to `~/.claude/CLAUDE.md` §12 table (or ask the Censor/operator to add it) and, if the
-  contour will send/receive mail, a row in `<WORKSPACE>\_interchat\
+  contour will send/receive mail, a row in `<work-root>\_interchat\
   REGISTRY-adresatov.md` mapping contour name → working-folder basename. There is no
   `register.py` step anymore — the file mailbox has no per-role registry file to seed.
 - **Phase 2 — check the inbox once, then rely on the global hook.** Look at
-  `<WORKSPACE>\_interchat\inbox\<this-contour-folder>\` for anything waiting;
+  `<work-root>\_interchat\inbox\<this-contour-folder>\` for anything waiting;
   going forward the global `hooks/interchat_inbox.py` surfaces new mail automatically on each
   turn. Nothing to launch, no `Monitor` watcher — that mechanism is retired (v1.x).
 - **Phase 3 — announce the new contour to the Censor** (HL-3, one-time registration — NOT a
   step-report; routine reporting is retired). File to
-  `_interchat\inbox\Цензор\` **plus** a `SendMessage` duplicate if the Censor's session is live
+  `_interchat\inbox\надзорный\` **plus** a `SendMessage` duplicate if the Censor's session is live
   — role, project root, rig summary, operator channel, irreversible allow-list you gate on.
 - **Phase 4 — context-layering setup (HL-5).** Scaffold `<project>/references/` + `<project>/audit/`
   before any task work; if the contour owns `<project>/CLAUDE.md`, design it lean from scratch

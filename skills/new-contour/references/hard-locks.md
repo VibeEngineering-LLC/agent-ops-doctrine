@@ -50,6 +50,16 @@ withholds ACCEPT on process-hygiene grounds.
 
 ## HL-3 — Run a Censor-watcher (detail)
 
+> ⛔ **Раздел УСТАРЕЛ целиком (пометка 2026-09-10, `надзорный:W-085`).** Он описывает
+> watcher на шине `cc-interchat-bus`, **закрытой оператором 16.08.2026**; `watch.py`
+> не работает. Новый контур watcher НЕ поднимает — входящие приходят через файловый
+> ящик #BUS-2 (`_interchat\inbox\<папка>\`) и хук почты при старте сессии.
+> Ниже — история; сохранены два урока, пережившие шину: (1) `Monitor` завершает
+> наблюдение, когда команда вышла, — поэтому нужен незавершающийся цикл;
+> (2) фоновая задача обязана быть узнаваема оператором по `description` с первого
+> взгляда (📬 + РОЛЬ в CAPS), иначе она функционально равна отсутствующей.
+> Переписывание раздела под #BUS-2 — открытая задача, оператору доложено.
+
 **Start it from the contour's own main loop via the `Monitor` tool**, NEVER as a
 `&`/`nohup`/`disown` background process spawned by a subagent (those become zombies on
 session reload). Replace `tester` with the role:
@@ -105,7 +115,7 @@ PYTHONUTF8=1 python C:/Users/<you>/.claude/skills/new-contour/scripts/watchdog.p
 # optional: --stale-seconds 120   (tighten the staleness window)
 ```
 
-Reading the output: a row `raspi5 age 1642s pending 1 → STALLED` means raspi5's watcher is
+Reading the output: a row `<role> age 1642s pending 1 → STALLED` means that role's watcher is
 dead while mail waits — go to that chat and run the pre-start dedup invariant to revive it
 (its `_state/<role>_watcher_seen.txt` does NOT yet contain the pending id, so the revived
 watcher re-emits the missed `NEW MAIL` immediately — nothing is lost).
@@ -152,7 +162,7 @@ spawned while `revival #N` is still alive from before the compaction.
 
 ## HL-5 — Source git is read-only: a tester works only in a clone (detail)
 
-Standing operator rule (2026-06-06, verbatim: «Запрети тестеру изменять что-то в
+Standing operator rule (оператор, 2026-06-06, verbatim: «Запрети тестеру изменять что-то в
 исходном гите проекта. Работа только в клоне!!!»). A tester/verifier contour **NEVER**
 mutates the canonical (source-of-truth) git of the project under test. All build / deploy /
 test / fix-experiment work happens in a **clone**; the canonical repo is a **read-only

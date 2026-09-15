@@ -2,10 +2,10 @@
 """Markdown → HTML в вёрстке документа (стиль MS Word).
 
 Вызов:
-    python md2html.py ФАЙЛ [ФАЙЛ ...] [--preset doc|article] [--title "Заголовок"]
+    python md2html.py ФАЙЛ [ФАЙЛ ...] [--preset a4|doc|article] [--title "Заголовок"]
                       [--out ПУТЬ] [--toc] [--nbsp] [--stdout]
 
-Умолчания: --preset doc, выход рядом с исходником (.md → .html), заголовок из первого H1.
+Умолчания: --preset a4 (вёрстка под страницу A4), выход рядом с исходником (.md → .html), заголовок из первого H1.
 Кодировка на чтение и запись — UTF-8 явно (умолчание Windows портит кириллицу).
 """
 import argparse
@@ -21,7 +21,10 @@ except ImportError:
 # --- Пресеты вёрстки -------------------------------------------------------
 # doc     — внутренний документ, отчёт, конспект: плотнее, шире, как страница Word.
 # article — публикуемый текст: уже колонка и крупнее кегль, комфортнее для чтения подряд.
+# a4      — СТАНДАРТ ПО УМОЛЧАНИЮ: полоса набора соответствует странице A4 (210x297 мм,
+#           поля 20x18 мм), экранный вид совпадает с печатным, лист на сером фоне.
 PRESETS = {
+    "a4": {"width": "1060px", "size": "15px", "lead": "1.55", "h1": "25px", "h2": "19px", "h3": "16px"},
     "doc": {"width": "1400px", "size": "15px", "lead": "1.55", "h1": "26px", "h2": "20px", "h3": "17px"},
     "article": {"width": "1100px", "size": "17px", "lead": "1.62", "h1": "30px", "h2": "23px", "h3": "19px"},
 }
@@ -70,8 +73,17 @@ sup {{ line-height: 0; }}
   h1, h2, h3, h4 {{ page-break-after: avoid; }}
   table, pre, blockquote, img {{ page-break-inside: avoid; }}
   a {{ color: #000; text-decoration: none; }}
-  @page {{ margin: 20mm 18mm; }}
+  @page {{ size: A4 portrait; margin: 20mm 18mm; }}
 }}
+"""
+
+# Экранная имитация листа A4: белая полоса на сером поле. Печать не затрагивается —
+# правила ниже перекрываются блоком @media print, идущим последним.
+CSS_A4_SCREEN = """
+@media screen {
+  html { background: #e8eaed; }
+  body { box-shadow: 0 2px 12px rgba(0,0,0,.18); margin: 28px auto; border-radius: 2px; }
+}
 """
 
 TPL = """<!DOCTYPE html>
@@ -142,7 +154,10 @@ def convert(src: pathlib.Path, preset: str, title: str | None,
     if toc:
         body = body.replace('<div class="toc">', '<div class="toc"><b>Содержание</b>', 1)
 
-    html = TPL.format(title=doc_title, css=CSS.format(**PRESETS[preset]), body=body)
+    css = CSS.format(**PRESETS[preset])
+    if preset == "a4":
+        css += CSS_A4_SCREEN
+    html = TPL.format(title=doc_title, css=css, body=body)
     if out is None:
         return html
     out.write_text(html, encoding="utf-8")
@@ -152,8 +167,8 @@ def convert(src: pathlib.Path, preset: str, title: str | None,
 def main() -> int:
     ap = argparse.ArgumentParser(description="Markdown → HTML в вёрстке документа")
     ap.add_argument("files", nargs="+", help="исходные .md")
-    ap.add_argument("--preset", choices=sorted(PRESETS), default="doc",
-                    help="doc — внутренний документ (по умолчанию), article — публикуемый текст")
+    ap.add_argument("--preset", choices=sorted(PRESETS), default="a4",
+                    help="a4 — страница A4 (по умолчанию), doc — широкий внутренний документ, article — публикуемый текст")
     ap.add_argument("--title", help="заголовок вкладки; по умолчанию первый H1")
     ap.add_argument("--out", help="путь выхода (только при одном входном файле)")
     ap.add_argument("--toc", action="store_true", help="вставить оглавление")
