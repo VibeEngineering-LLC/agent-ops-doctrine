@@ -1,5 +1,6 @@
 """Reusable Ollama codegen driver (workflow skill, IRON-MODE harness).
-Claude authors the spec (.md); qwen3-coder:30b generates the code; this helper saves it.
+Claude authors the spec (.md); a local model generates the code (default qwen3.6:27b per #LOC-5,
+override with the 5th argument); this helper saves it.
 Imports guarded_generate from the sibling vram_guard_reference.py (self-contained).
 Usage: python gen_code.py <spec.md> <out.py> [num_predict=16000] [num_ctx=32768]
 v1.1 (2026-08-23, P-002): defaults raised (6000 tokens truncated 400-line files
@@ -14,7 +15,7 @@ import ast, sys, pathlib, warnings
 
 def _reject(code: int, msg: str, body: str) -> None:
     rej = out.with_name(out.name + ".rejected.txt")
-    rej.write_text(body, encoding="utf-8")
+    rej.write_text(body, encoding="utf-8", newline="\n")
     print(f"[gen] ABORT: {msg} Target not written; rejected answer: {rej}", file=sys.stderr)
     sys.exit(code)
 sys.stdout.reconfigure(encoding="utf-8")
@@ -24,7 +25,7 @@ spec = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 out = pathlib.Path(sys.argv[2])
 npred = int(sys.argv[3]) if len(sys.argv) > 3 else 16000
 nctx = int(sys.argv[4]) if len(sys.argv) > 4 else 32768
-model = sys.argv[5] if len(sys.argv) > 5 else "qwen3-coder:30b"
+model = sys.argv[5] if len(sys.argv) > 5 else "qwen3.6:27b"  # #LOC-5 (2026-09-24): default for any generation
 resp = guarded_generate(model=model, prompt=spec, fmt=None, want_gpu=True,
     priority=50, max_wait_s=900, temperature=0, num_ctx=nctx, extra_options={"num_predict": npred})
 text = resp.get("response", "") if isinstance(resp, dict) else str(resp)
@@ -50,5 +51,5 @@ if out.suffix == ".py":
             _reject(4, f"not valid Python ({e.msg}, line {e.lineno}). Head:\n{head}\n", t)
     for w in caught:
         print(f"[gen] WARNING: {w.category.__name__} line {w.lineno}: {w.message}", file=sys.stderr)
-out.write_text(t.strip() + "\n", encoding="utf-8")
+out.write_text(t.strip() + "\n", encoding="utf-8", newline="\n")
 print(f"[gen] {len(t)} chars -> {out} | {model} npred={npred}", file=sys.stderr)

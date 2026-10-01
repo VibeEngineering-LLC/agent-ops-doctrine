@@ -218,6 +218,8 @@ gives priority DESC + timestamp ASC without parsing.
 
 ### Drop-out triggers
 
+**v1.9.5 (надзорный 2026-09-17):** first-in-line, blocked only by an Ollama-resident model that no *other* live ticket names → the waiter unloads it immediately instead of waiting out its `OLLAMA_KEEP_ALIVE` (default 5m), which used to always exceed the drop-out timer below and make every model switch fail. A live ticket naming the competing model still blocks eviction — wait, don't steal a model someone else is about to use.
+
 A waiter drops out of the queue (GPU unavailable → `guarded_generate()` raises `VramGuardFailure`, never CPU) when any of:
 
 | Trigger | Default | kwarg to override |

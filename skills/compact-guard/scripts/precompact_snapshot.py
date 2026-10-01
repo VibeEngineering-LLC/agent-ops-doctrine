@@ -39,6 +39,7 @@ MAX_FILES = 25
 MAX_CMDS = 20
 MAX_USER_MSGS = 5
 MAX_SNAPSHOTS_KEEP = 40
+SESSION_STATE_STALE_HOURS = 6.0  # #SS-1 (оператор 2026-09-24): порог "устарел" для автодополнения черновика
 
 
 def read_tail(path: str, nbytes: int = MAX_TAIL_BYTES) -> str:
@@ -262,6 +263,65 @@ def session_state_age(cwd: str) -> str:
         return "не удалось проверить"
 
 
+def write_session_state_draft(cwd: str, collected: dict, payload: dict) -> str:
+    """#SS-1 (оператор 2026-09-24, "сделай чтобы автокомпакт без SESSION-STATE.md был
+    невозможен"): не жёсткий блок компакта (см. докстринг модуля - блокировка
+    приводит к застывшей сессии), а гарантия, что файл к моменту сжатия ВСЕГДА
+    существует. Если файла нет - хук пишет минимальный черновик из уже собранных
+    механических фактов. Если файл есть, но устарел (> SESSION_STATE_STALE_HOURS) -
+    хук ДОПИСЫВАЕТ в конец короткий блок с теми же фактами, не трогая ручные записи
+    оператора/агента (перезапись стёрла бы замысел, ради сохранения которого файл
+    и существует).
+
+    Возвращает строку для подстановки в снапшот вместо session_state_age().
+    """
+    try:
+        import time
+        p = os.path.join(cwd or ".", "SESSION-STATE.md")
+        block_lines = [
+            f"## Автодополнение хука (PreCompact, {datetime.now().strftime('%Y-%m-%d %H:%M:%S')})",
+            "",
+            "Механические факты на момент сжатия (не замысел - его агент допишет сам):",
+        ]
+        user_msgs = collected.get("user_msgs") or []
+        if user_msgs:
+            block_lines.append("")
+            block_lines.append("Последние указания оператора:")
+            for msg in user_msgs:
+                block_lines.append(f"> {msg}")
+        files = collected.get("files") or []
+        if files:
+            block_lines.append("")
+            block_lines.append("Файлы в работе:")
+            for fpath in files:
+                block_lines.append(f"- `{fpath}`")
+        block = "\n".join(block_lines) + "\n"
+
+        if not os.path.isfile(p):
+            header = (
+                f"last update: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+                f"# ЧЕРНОВИК - автосоздан хуком precompact_snapshot.py (#SS-1, 2026-09-24)\n\n"
+                f"Замысел сессии в момент сжатия НЕ был зафиксирован агентом вручную. "
+                f"Ниже - только механические факты, собранные хуком; роль, активные линии, "
+                f"следующий шаг агент обязан дописать САМ сразу после сжатия (§30, #CMP-1).\n\n"
+            )
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(header + block)
+            return "**ОТСУТСТВОВАЛ** - хук создал черновик (только механика, замысел не восстановить)"
+
+        hours = (time.time() - os.path.getmtime(p)) / 3600.0
+        if hours >= SESSION_STATE_STALE_HOURS:
+            with open(p, "a", encoding="utf-8") as f:
+                f.write("\n" + block)
+            return (f"**УСТАРЕЛ на {hours:.1f} ч** - хук дописал в конец файла механические факты "
+                     "(запись не тронута); свериться фактом после сжатия")
+        if hours < 1:
+            return f"обновлён {int(hours * 60)} мин назад - свежий"
+        return f"обновлён {hours:.1f} ч назад"
+    except Exception:
+        return "не удалось проверить/создать"
+
+
 def build_markdown(payload: dict, collected: dict, git: dict, ts: str) -> str:
     trigger = payload.get("trigger", "?")
     session_id = payload.get("session_id", "?")
@@ -274,7 +334,16 @@ def build_markdown(payload: dict, collected: dict, git: dict, ts: str) -> str:
         ctx_str = f"~{ctx_k}k токенов"
 
     compact_seen_str = "да" if collected["compact_seen"] else "нет"
-    state_age = session_state_age(payload.get("cwd") or "")
+    # #CG-2 (надзорный, 2026-09-30): черновик SESSION-STATE — в корень контура по СТАРТОВОМУ
+    # каталогу сессии, а не в уехавший cwd (30.09: <contour>/audit/raw-1229-ab/SESSION-STATE.md).
+    state_dir = payload.get("cwd") or ""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import snapshot_select
+        state_dir = snapshot_select.state_dir(payload, state_dir)
+    except BaseException:
+        state_dir = payload.get("cwd") or ""
+    state_age = write_session_state_draft(state_dir, collected, payload)
 
     user_msgs = "\n".join(f"> {msg}" for msg in collected["user_msgs"])
     if not user_msgs:

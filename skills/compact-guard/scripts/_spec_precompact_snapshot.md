@@ -162,7 +162,11 @@ EXACT CONTENT TO PRODUCE:
     - Write `build_markdown(...)` to `SNAP_DIR / fname` with `encoding="utf-8"`.
     - Also write a pointer file `SNAP_DIR / "latest.json"` containing
       `{"path": str(SNAP_DIR / fname), "ts": ts, "session_id": ..., "cwd": ..., "trigger": ...}`
-      via `json.dump(..., ensure_ascii=False, indent=2)`.
+      via `json.dump(..., ensure_ascii=False, indent=2)`. No hook reads it since #CG-1 (2026-09-30).
+    - #CG-2 (надзорный, 2026-09-30): the SESSION-STATE draft/append (`write_session_state_draft`, #SS-1) goes to
+      `snapshot_select.state_dir(payload, payload cwd)` — the contour root by the session LAUNCH directory
+      (`hooks/contour_root.py`, `source == "launch"` only), otherwise the payload `cwd`; any failure
+      (`BaseException`) → the payload `cwd`.
     - Call `prune_old()`.
     - Print `json.dumps({"suppressOutput": True})` and return 0.
     - The ENTIRE body of main must be inside a try/except that, on any exception, still prints

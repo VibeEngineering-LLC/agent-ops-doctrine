@@ -4,4 +4,7 @@ __pycache__/
 node_modules/
 .DS_Store
 Thumbs.db
+*.bak*
+_state/
+*.rejected.txt
 *.log

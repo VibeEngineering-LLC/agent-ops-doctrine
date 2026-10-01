@@ -10,7 +10,7 @@ maintainer's Claude Code setup. Project-specific skills (domain data pipelines, 
 infrastructure, hardware firmware for specific devices) are intentionally excluded — this is the
 transferable operating layer, not the product work built on top of it.
 
-Last synchronized with the private core: 2026-09-15. Thresholds marked "assigned, not measured"
+Last synchronized with the private core: 2026-10-01. Thresholds marked "assigned, not measured"
 are working values that have not yet been validated by measurement — treat them as such.
 
 ---
@@ -58,11 +58,16 @@ don't break a rule silently:
 
 Context rot is real — output quality drops measurably as the context window fills, well before
 it's technically full. Discipline:
-- Check your context-fill percentage periodically.
-- Compact around 80% fill; clear and re-prime with a sharper brief at 90%+.
-- The percentage base is the **auto-compaction threshold**, not the nominal window size. Older
-  60%/75% thresholds were calibrated for a much smaller window; with a large (~1M-token) window
-  read any legacy "≥60%" trigger as "≥80%".
+- Watch your context fill against thresholds expressed in **absolute tokens**, not percentages
+  (a percentage depends on which base you pick — nominal window or auto-compaction point — and
+  drifted with every window size). Values used here for a ~1M-token window, assigned rather than
+  measured: **450k** — don't start new lines of work or large reads, finish the current step;
+  **500k** — mandatory *planned* compaction (procedure in §11); **600k** — no new subagent or
+  workflow dispatches until a ready handoff exists; **700k** — the harness's auto-compaction
+  ceiling, set explicitly, an emergency measure. The signals come from a hook that counts the
+  last assistant message's input + cache tokens, not from your own estimate.
+- `/clear` between unrelated tasks; clear and re-prime with a sharper brief when the same
+  thing had to be explained twice.
 - **Two-correction rule:** if you have to explain the same thing twice to get it right, the
   context is likely poisoned by an earlier wrong turn — clear and restart with a better brief
   rather than pushing through a third correction.
@@ -105,6 +110,18 @@ file, don't abandon the rung.
 
 **Never through the local model:** file edits, "do / don't" decisions, commits, communication
 with the user.
+
+**Default model: quality first.** For any generation — code included — use the strongest local
+model that fits the GPU; a faster specialised coder model only for throughput on large batches,
+with the reason in one line. Name the model explicitly in the call even when a helper has a
+default (older copies of the helper may differ).
+
+**The local model produces; it does not grade.** Trust it for code and scripts only through
+acceptance of the *artifact* (tests red first, then mutations — §12). Don't trust it to grade,
+to label records, or to extract/summarize material that will serve as evidence, until the
+evaluator registry (§22) shows ≤5% false acceptances over at least 60 bad samples (assigned,
+not measured). Where the answer is "no", a cloud verifier is legitimate at once — that is not a
+violation of "work at the lowest rung" (§13).
 
 **A local-model crash is a significant event, always.** Any failure of a delegated call — a
 guard refusal, HTTP error/timeout, invalid JSON under a JSON format, an empty response, "I don't
@@ -230,17 +247,31 @@ staleness rule (if older than 7 days, warn before acting on it as current), open
 priority/status, key absolute paths, session conventions, security invariants in force, and the
 checklist of procedures, and the next concrete step; ≤200 lines; never secrets, personal data,
 full transcripts, or the content of other agents' areas (§19). Read it at session start. Rewrite
-it on explicit request, on closing a significant line of work, or when context fill reaches ≥80%
-(§2) — not on every single turn. If the role is cloned across multiple machines, the file
-must say explicitly which copy wrote it — mixing up "my own stale plan" with "the other clone's
+it on explicit request, on closing a significant line of work, or when context fill reaches the
+planned-compaction threshold (§2) — not on every single turn. If the role is cloned across
+multiple machines, the file must say explicitly which copy wrote it — mixing up "my own stale plan" with "the other clone's
 current plan" is a real, confirmed failure mode.
 
-**At ≥80% context fill, update the snapshot yourself, in the same turn, without waiting for the
-user's reply, and only then propose compaction or a clear.** The snapshot is your own control space and needs no permission. Automatic
-compaction fires without your turn and without a command; between "I suggest compacting" and the
-user's reply it can fire with the old file, and a freshness check that runs after compaction is
-too late — the intent is already gone. (This risk is constructive: no observed auto-compaction
-incident yet; the measure is placed before an incident, not after.) Full body:
+**At the planned-compaction threshold (500k tokens, §2), update the snapshot yourself, in the
+same turn, without waiting for the user's reply, and only then propose compaction.** The snapshot
+is your own control space and needs no permission. Automatic compaction fires without your turn
+and without a command; between "I suggest compacting" and the user's reply it can fire with the
+old file, and a freshness check that runs after compaction is too late — the intent is already
+gone. (This risk is constructive: the measure is placed before an incident, not after.)
+
+**Planned compaction procedure.** (1) Finish the current atomic step — no half-edited files, no
+killed background tasks. (2) Write a handoff block at the top of the state file with five
+non-empty sections: NEXT STEP (one executable action, with a path or a command in backticks),
+WAITING (every background task: id, what it writes where; unanswered messages), USER DECISIONS
+(verbatim), NOT VERIFIED, PROHIBITIONS in force. (3) Run the mechanical check that the block
+exists, is fresher than the threshold crossing, and all five sections are filled — a script
+with a `--check` mode, not a glance. (4) Tell the user exactly what to type to compact; an agent
+cannot run slash commands from a hook or by itself. (5) Until then only answer the user and read
+small slices. After a *planned* compaction, continue with the NEXT STEP without asking; after an
+*emergency* one (the handoff was not ready) read the snapshot and verify everything against the
+disk, then report the gaps. A stop-gate hook that refuses to end a turn past the threshold
+without a ready handoff makes this mechanical; the hook does not verify the block's date, so a
+new block always goes **above** the older ones. Full body:
 [references/session-state-file.md](references/session-state-file.md).
 
 ## 12. Self-audit with a sterile pass, not your own contaminated context
@@ -381,11 +412,21 @@ parsing.
 summarization.
 
 **Rung 3 — a capable subagent**, reserved for steps that genuinely need judgment along the way.
+A task that pulls toward rung 3 is first tried honestly on rung 2 (except where §4 says the local
+model must not grade). Inside rung 3 the model tier is chosen bottom-up too, and **every
+dispatch sets the model parameter explicitly** — omitted, the subagent silently inherits the
+session's model and its price. **3a** — the smallest tier: the criterion is fixed *before* the
+work (search and select by a given feature, quote extraction, labeling the local model may not be
+trusted with); not for completeness or verbatim fidelity. **3b** — a mid-size tier, the default:
+the criterion emerges along the way. **3c** — the top tier: designing something new, one of the
+two passes before an irreversible action, or a failure of 3b. **3d** — the highest available tier:
+only on the user's request or after a 3c failure. Climb only after a named failure of the lower
+tier; a gate hook can enforce the explicit parameter.
 
 **Rung 4 — a multi-agent fan-out** (a workflow of paid subagents in parallel), **only on the
-user's explicit request**, for genuinely independent intellectual perspectives (adversarial
-verification, a judging panel) — never as the default for bulk, templated, classification or
-file-walking work, which goes to the local model. One exploratory subagent is fine; a fan-out is
+user's explicit request** (quote the request in the report), for genuinely independent
+intellectual perspectives (adversarial verification, a judging panel) — never as the default for
+bulk, templated, classification or file-walking work, which goes to the local model. One exploratory subagent is fine; a fan-out is
 not, and a **series** of ≥2 separate subagent dispatches with the same task template in one turn
 counts as a fan-out. Two sterile passes with *different* boundaries (§12) are not a fan-out.
 
@@ -580,6 +621,18 @@ non-ASCII, assume by default that text is **not** ASCII:
   non-ASCII text comes from Python, not from `.ps1`; don't rely on non-ASCII in comments either.
   Acceptance: the script was actually **run** without a parser error — command output, not "looks
   right".
+- **PowerShell expands `$?`, `$LASTEXITCODE` and any `$variable` inside a double-quoted string
+  before the string reaches a native command.** `docker run … bash -c "cmd; if [ $? -ne 0 ]; …"`
+  hands bash the already-substituted `True`, so the exit-code check inside the container checks
+  nothing and silently "passes". Put complex shell code into a file and run only the file, or use
+  single quotes where `$` is literal. Acceptance: a deliberately failing command inside the
+  container must produce a non-zero code *outside* (verified on PowerShell 7: `"$?"` → `True`,
+  `'$?'` → `$?`).
+- **A backslash before a digit in an ordinary (non-raw) Python string is a control character**
+  (`"...\1 ..."` → `chr(1)`): the path silently turns into garbage with no exception. A JSON
+  payload built through shell `echo` with backslashes and non-ASCII breaks on escaping before the
+  hook ever reads it, and the hook exits 0 looking clean. Use raw strings or forward slashes;
+  build payloads in Python (`json.dumps`) or with the file-write tool.
 
 Full body: [references/windows-encoding.md](references/windows-encoding.md).
 
@@ -611,6 +664,9 @@ When several long-lived agent sessions run in parallel, each with its own area:
   memory; state boundaries between neighbours explicitly ("A writes, B verifies"). Supervisory
   roles design rules and help when a contour can't cope — they are not a stage of anyone's work
   cycle and don't control the agents.
+- **A skill or tool with no owner entry in the registry is the supervisory role's.** "Nobody's
+  means yours": read it, use it, add reference facts to it; changes to its method are handled
+  like any other area's (a notice to the owner as soon as a real owner appears).
 - **You may ask any agent for audit or help** within these boundaries — you write the question,
   you don't do their work.
 - **Every outgoing inter-session message is a file** in the recipient's inbox folder (folder name =

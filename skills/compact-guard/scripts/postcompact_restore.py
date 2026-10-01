@@ -158,17 +158,26 @@ def build_notice(latest: dict, sections: dict) -> str:
 
 
 def main() -> int:
+    # #CG-1 (надзорный, 2026-09-30): снапшот — только СВОЕЙ сессии, по session_id из payload.
+    # Общий latest.json принадлежит последней сжатой сессии: при компактах подряд
+    # прочие получали чужую памятку.
+    payload = {}
     try:
-        sys.stdin.buffer.read()  # байты; payload не используется, просто дренируем
-    except Exception:
-        pass
-
-    latest = load_latest()
-    if not latest:
-        silent()
+        raw = sys.stdin.buffer.read().decode("utf-8", errors="replace")
+        payload = json.loads(raw) if raw.strip() else {}
+    except BaseException:
+        payload = {}
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import snapshot_select
+    except BaseException:
+        emit({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "⚠️ compact-guard: не загрузился snapshot_select.py рядом с postcompact_restore.py — памятка после компакта отключена. Читай SESSION-STATE.md в корне своего контура и сообщи надзорному контуру."}, "suppressOutput": True})
         return 0
-
-    if not is_fresh(str(latest.get("ts") or "")):
+    try:
+        latest = snapshot_select.notice_inputs(payload, str(SNAP_DIR))
+    except BaseException:
+        latest = {}
+    if not latest:
         silent()
         return 0
 

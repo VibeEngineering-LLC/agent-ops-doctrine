@@ -114,10 +114,12 @@ EXACT CONTENT TO PRODUCE:
     - `files`: bullet list in backticks. If empty → `_(нет)_`.
 
 11. Function `main() -> int`:
-    - Read and discard stdin safely (the payload is not needed beyond confirming the event; still
-      consume it so the writing end never blocks): wrap `sys.stdin.read()` in try/except.
-    - `latest = load_latest()`; if falsy → `silent()`, return 0.
-    - If `not is_fresh(str(latest.get("ts") or ""))` → `silent()`, return 0.
+    - #CG-1 (надзорный, 2026-09-30): read stdin BYTES, decode utf-8 (errors=replace), `json.loads` → `payload`
+      (empty or broken → `{}`; catch `BaseException`).
+    - Import `snapshot_select` from the script's own directory; on ANY failure emit a SessionStart
+      `additionalContext` warning that the module did not load and the notice is disabled, return 0.
+    - `latest = snapshot_select.notice_inputs(payload, str(SNAP_DIR))` — own session only; exception or falsy →
+      `silent()`, return 0. `latest.json`, `load_latest()` and `is_fresh()` are NOT used.
     - `md_path = str(latest.get("path") or "")`; `sections = extract_sections(md_path) if md_path else {}`.
     - Build the notice and emit:
       ```

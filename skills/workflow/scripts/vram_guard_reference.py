@@ -166,7 +166,7 @@ TRIAL_BLOCKED_MODELS: set[str] = set()
 # so copies can be diffed against the canonical source without reading comments —
 # the 2026-08-28 drift (8 stale copies, all claiming v1.8.0) was invisible precisely
 # because the only version marker was a comment nobody updated.
-GUARD_VERSION: str = "1.9.4"
+GUARD_VERSION: str = "1.9.5"
 
 SYSTEM_RESERVE_MB: int = 3_000
 
@@ -496,7 +496,7 @@ def wait_until_can_load(
 _QUEUE_HEARTBEAT_TTL_S: int = 60
 _QUEUE_POLL_S: float = 5.0
 _QUEUE_DROP_OUT_AFTER_S: float = 120.0
-_QUEUE_DROP_OUT_POSITION: int = 2  # if my_pos > 2, fall back to CPU
+_QUEUE_DROP_OUT_POSITION: int = 2  # if my_pos > 2, give up (no CPU path since 1.9.3, #CPU-1)
 
 
 def _queue_dir() -> pathlib.Path:
@@ -540,6 +540,16 @@ def _parse_ticket_filename(name: str) -> dict[str, Any] | None:
         return None
     return {"inv_prio": inv, "created_at": parts[1], "id": parts[2],
             "priority": 999 - inv}
+
+
+def _ticket_model(path: str) -> str | None:
+    """Read a ticket file's `model` field. Best-effort — a race with cleanup
+    (file deleted between listing and reading) or corrupt JSON is not an error
+    here, just means "unknown", handled by the caller as if unclaimed."""
+    try:
+        return json.loads(pathlib.Path(path).read_text(encoding="utf-8")).get("model")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def _create_ticket(model: str, priority: int, estimated_mb: int,
@@ -674,6 +684,9 @@ def wait_in_queue(
       VramVerdict(ok=False, reason='queue_drop_out_gpu_unavailable') → caller raises
       VramVerdict(ok=False, reason='queue_timeout_gpu_unavailable')  → caller raises
 
+    First-in-line + blocked only by an IDLE competing Ollama model (no other
+    live ticket names it) → v1.9.5 unloads that model instead of waiting.
+
     Drop-out triggers:
       - queue position > drop_out_position (default 2)
       - elapsed > drop_out_after_s (default 120 s)
@@ -708,6 +721,21 @@ def wait_in_queue(
 
             verdict = check_can_load(model, reserve_MB=reserve_MB,
                                      estimate_override_MB=estimate_override_MB)
+
+            # v1.9.5 (§4/#CPU-1 doctrine step "unload the idle model", never
+            # implemented — надзорный 2026-09-17): first-in-line, blocked only by
+            # an Ollama-resident model nobody else is queued for → unload it
+            # instead of waiting out its keep_alive (can exceed drop_out_after_s).
+            if my_pos == 0 and not verdict.ok and verdict.reason == "insufficient_vram_competing_ollama":
+                others = [r for r in live if r["id"] != ticket_id]
+                claimed = {_ticket_model(r["path"]) for r in others}
+                idle = [m.get("name") for m in verdict.currently_loaded
+                       if m.get("name") != model and m.get("name") not in claimed]
+                if idle:
+                    for name in idle:
+                        unload(name)
+                    time.sleep(1.0)
+                    continue
 
             # First-in-line + VRAM available → pass.
             if my_pos == 0 and verdict.ok:

@@ -37,14 +37,19 @@ not a general-purpose shareable skill. The environmental coupling below is an
 personal toolkit" 2026-06-05). Revisit ALL of it before using on another machine:
 
 - **Single Windows host.** Ollama at `127.0.0.1:11434`; generative
-  `qwen3-coder:30b` (~18 GB) + embeddings `bge-m3`. Paths under
+  `qwen3.6:27b` (default, ~17 GB) and `qwen3-coder:30b` (throughput, ~18 GB),
+  VLM `qwen2.5vl:7b`, embeddings `bge-m3`. Paths under
   `~/claude-workflow-skill/` and `%LOCALAPPDATA%/`.
 - **RTX 4090, 24 GB VRAM.** The `SYSTEM_RESERVE_MB`, per-role `num_ctx`
-  profiles, and the single-model policy are calibrated to exactly this ceiling.
+  profiles, and the one-model-at-a-time rule are calibrated to exactly this ceiling.
   A larger-footprint model (e.g. `qwen3.6:latest` at ~23 GB on disk) would not
-  stay GPU-resident here — it would spill to CPU (forbidden, #CPU-1) or OOM. That is
-  why `qwen3-coder:30b` is the locked generative default, not a bigger general
-  model.
+  stay GPU-resident here — it would spill to CPU (forbidden, #CPU-1) or OOM.
+  Which generative model to use is decided by the **Model policy** section below
+  (TWO-MODEL QUALITY-FIRST, 2026-08-23: `qwen3.6:27b` default everywhere). The
+  earlier "`qwen3-coder:30b` is the locked default" wording was superseded by that
+  decision (corrected 2026-09-24; doctrine: `references/iron-mode.md` § B.2d).
+  `scripts/gen_code.py:28` defaults to `qwen3.6:27b` since 2026-09-24 (was
+  `qwen3-coder:30b`). Passing the model as the 5th argument is still good practice (older copies).
 - **Imported HARD-LOCK rules.** Several policies (FILL THE FLEET, two-tier
   release publishing, etc.) are imported verbatim from specific projects
   (спектрометрия) and the operator's global `~/.claude/CLAUDE.md`. They encode
@@ -129,7 +134,33 @@ class; local wall-clock is not a selection criterion per operator instruction). 
 3. **Bulk classification?** (tier docs, validity yes/no, dedup by heuristic) → `qwen3.6:27b`, **NO `format='json'`** — see caveat below. On a very large batch, `qwen3-coder:30b` is the throughput option.
 4. **Long summarization >5000 lines / >100 KB?** (raw dumps, PDF conversion, multi-page logs) → `qwen3.6:27b`, output markdown ≤200 lines.
 
-**Codegen sizing (LLM contour P-002, 2026-08-23):** a 400-line file needs ~10-16k output tokens. `gen_code.py` v1.1 defaults to `num_predict=16000` / `num_ctx=32768`; below that, generation is cut off mid-function. Splitting the spec into smaller parts does NOT help against a thinking model — reasoning is re-spent on every part.
+**Codegen sizing (LLM contour P-002, 2026-08-23):** a 400-line file needs ~10-16k output tokens. `gen_code.py` v1.3 defaults to `num_predict=16000` / `num_ctx=32768`; below that, generation is cut off mid-function (caught at exit 2, `<target>.rejected.txt` kept). Splitting the spec into smaller parts does NOT help against a thinking model — reasoning is re-spent on every part.
+
+**Spec form for `gen_code.py` — SKELETON, not description (2026-09-15, two independent sources same day):** a spec written as a text DESCRIPTION of the task produced defective code twice in the simulation contour that same day (misread parsing logic, wrong slope formula) and 6 of 26 field failures in the supervisory role's runs when reused logic was named by path ("copy verbatim from file X") instead of quoted inline — the model never sees file X, so it re-derives its own algorithm under the same function name. Give a spec as a SKELETON (explicit function signatures, variable names, formulas, loop order) instead of prose, and paste any donor code straight into the spec text, whenever ANY of:
+- the code does ≥2 levels of grouping/aggregation over data;
+- the input is ≥3 files/sources;
+- part of the logic is reused from another file — a path reference does NOT count as transfer, the model cannot read it.
+
+**Non-code one-shot: `scripts/ask_local.py` (2026-09-19, v1.0).** For classification / extraction / claim-vs-source checks you do NOT write a helper script (and do not escalate to a subagent because the code hook blocked you): `python ask_local.py --prompt <template.md> --input <file> --out <result>` or batch `--jsonl <file>` / `--input-dir <dir>` → JSONL with per-record `error`. Data is fenced with `wrap_untrusted`; input larger than `num_ctx` is refused BEFORE the call; each failure class has its own exit code (3 empty, 4 truncated, 5 not JSON, 6 too big, 7 guard + `ollama_failure` JSON, 9 HTTP). Mutation-checked: the contour's private test script, 12 cases, 6 mutants each red on its own class.
+
+**Шаблон брифа субагенту — `references/subagent-brief-template.md` (2026-09-24, #CZ-2).** Два варианта:
+А — исполнитель (задача-одна-операция, исходное/целевое состояние, границы, условия остановки с возвратом отчёта,
+критерий приёмки, отчёт с доказательствами, `LESSONS`); Б — стерильный проверяющий (#SA-7: без моих выводов,
+ожидаемых чисел и истории попыток). Плюс grep-проверка брифа перед отправкой. Идеи — из `nidhinjs/prompt-master`
+(MIT), адаптированы; что не взято — таблица в конце файла.
+
+**`scripts/extract_bash_commands.py` (2026-09-24).** Извлекает все вызовы Bash-инструмента
+(команда + результат) из JSONL-транскрипта субагента (`projects/<проект>/<сессия>/subagents/agent-*.jsonl`) в
+один читаемый `.md` — для перепроверки, что субагент реально выполнял, без чтения полного транскрипта. `python
+extract_bash_commands.py <transcript.jsonl> [-o отчёт.md]`; коды: 0 успех, 2 неверные аргументы, 3 файл
+недоступен. Приёмка: `--selftest` 14/14, боевой транскрипт (29 команд) сошёлся с независимым пересчётом,
+мутации `mutants.json` 5/5 killed через `scripts/mutation_runner_selftest.py <target.py> <mutants.json>`
+(универсальный мутационный раннер для self-contained `--selftest`-скриптов). Рабочие материалы приёмки (5 генераций,
+спека, логи, отвергнутые версии) хранятся в приватном журнале надзорной роли. Урок: если пример в спеке для
+`gen_code.py` сам содержит синтаксическую ошибку (не-ASCII символ внутри `b"..."`-литерала), модель послушно
+её воспроизводит — ast.parse потом честно отклоняет файл (exit 4), но причина в спеке, не в модели.
+
+**Brace languages (C/C++/Java/JS — single-source observation, firmware work 2026-09-18, `qwen3-coder:30b`, not re-measured by the local-models contour):** a skeleton whose function bodies are written as indented steps WITHOUT braces came back as the same pseudocode — it does not compile. Two workarounds reported to work: write the skeleton WITH the braces, or run a second mechanical "braces only" pass and compare tokens before/after (only braces may differ). Python is unaffected — indentation is syntax there, and `gen_code.py` v1.3 already rejects non-parsing output (exit 4).
 
 If all four are NO, the task belongs to Claude / a Claude subagent.
 
