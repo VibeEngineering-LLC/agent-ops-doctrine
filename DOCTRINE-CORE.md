@@ -10,14 +10,14 @@ maintainer's Claude Code setup. Project-specific skills (domain data pipelines, 
 infrastructure, hardware firmware for specific devices) are intentionally excluded — this is the
 transferable operating layer, not the product work built on top of it.
 
-Last synchronized with the private core: 2026-10-01. Thresholds marked "assigned, not measured"
+Last synchronized with the private core: 2026-10-03. Thresholds marked "assigned, not measured"
 are working values that have not yet been validated by measurement — treat them as such.
 
 ---
 
 ## 1. Stay responsive, check in often, delegate by default
 
-Four rules that override "but doing it myself is faster". On conflict — surface it to the user,
+Five rules that override "but doing it myself is faster". On conflict — surface it to the user,
 don't break a rule silently:
 
 1. **Stay reachable.** Every subagent dispatch runs in the background, no exceptions (§3). A
@@ -53,6 +53,19 @@ don't break a rule silently:
    to the user before starting (from a `HEAD` request's `Content-Length` or the download page) —
    a >500 MB download with no preceding question is visible in the tool log — and a running "downloaded this session: N MB" line in the session-state file after the first
    download.
+5. **Ask key questions through a structured form, not in prose.** A *key* question is one of:
+   an irreversible action (push, delete, publish, installing a hook, writing into another
+   agent's area); a choice of path that the later work depends on; a blocker that stops the work
+   until answered. Ask it with the harness's structured-question tool (up to 4 questions, 2–4
+   options each, the recommended option first and marked, each option's consequence in its
+   description), one object per question — a "yes" covers only the action it names. Everything
+   else goes into the report, at most one screen, without a question. Violation: a key question
+   buried as "continue?" at the end of a report. Where the environment has no such tool,
+   numbered options in text with a note that the form is unavailable. A subagent does not ask the
+   user: it returns the key question to the orchestrator, which asks. Checkable artifact: a key
+   action in the tool log is preceded by a call of the question tool, and the answer is quoted in
+   the report. Every "explicit yes of the user" demanded elsewhere in this document (§12, §20) is
+   obtained this way.
 
 ## 2. Context hygiene
 
@@ -111,10 +124,12 @@ file, don't abandon the rung.
 **Never through the local model:** file edits, "do / don't" decisions, commits, communication
 with the user.
 
-**Default model: quality first.** For any generation — code included — use the strongest local
-model that fits the GPU; a faster specialised coder model only for throughput on large batches,
-with the reason in one line. Name the model explicitly in the call even when a helper has a
-default (older copies of the helper may differ).
+**Default model: quality first.** For any generation — code included — use the local model that
+scored best on your own measured task classes and fits the GPU; a faster specialised coder model
+only for throughput on large batches, with the reason in one line. When the default is switched
+before a full re-measurement, say so next to it ("measurement incomplete") and keep the previous
+default installed as the fallback. Name the model explicitly in the call even when a helper has a
+default.
 
 **The local model produces; it does not grade.** Trust it for code and scripts only through
 acceptance of the *artifact* (tests red first, then mutations — §12). Don't trust it to grade,
@@ -321,6 +336,18 @@ test (real file and repo names, non-ASCII text, spaces, dots), not from a source
 For each sample, show that the defective and fixed versions produce **different** results on it,
 and **state the count** of such samples ("0" is legitimate and means "the defect is latent").
 
+**Simplify before acceptance.** When the code changed in a task reaches ≥30 significant lines
+(count `git diff --numstat` added + removed, minus blank lines and comments; without git, the
+number of changed lines named in the report; mechanical edits — renames, formatting, generated
+files — don't count), one simplification pass runs **before** the sterile pass and the mutation
+acceptance, because simplifying changes the code and invalidates earlier checks. One pass, not a
+fan-out; reuse the harness's built-in simplification skill if it has one, list the files it
+touched, and revert edits outside the task's files. Behavior is preserved exactly; gates, safety
+checks and input validation are not removed; for a hook or gate, the pointed mutation is re-run
+afterwards — a green run is not enough. Checkable artifact: a report line "simplification: <by
+what>, significant lines <N>, tests after: <output or 'no tests'>" or "simplification: not needed
+(<N> significant lines)". A red run after simplifying means the simplification is rolled back.
+
 **Measurement tools must flag ambiguous results, not just report numbers.** "What does this
 mean" is asked by the *instrument*, not by memory — a correctly computed number can mean
 something else. Any benchmark/test harness should print, alongside results, an explicit "needs
@@ -341,10 +368,25 @@ or file) attached or quoted together with the command.
 review is presented as *someone else's*, without a "mine" label — with a "self" label the
 detection mechanism doesn't engage; a fresh background subagent is a mechanical relabeling. (2)
 Questions of the form "is X correct?" are forbidden in verification briefs — the brief poses a
-task with no expected result shown. (3) Detection and fixing are separated: the executor may fix
+task with no expected result shown (auditing *someone else's* code against its specification is
+the separate case below). (3) Detection and fixing are separated: the executor may fix
 a pointed-out error but may not decide there is nothing to fix; "think again" without a new fact
 spoils the check. Checkable artifact: the brief contains task, method, acceptance criterion and
 zero occurrences of phrases like "is it correct", "expected", "should come out".
+
+**Two cases of verification.** (a) Checking *your own* conclusions: intent and expected result
+are hidden, as above. (b) Auditing *someone else's* code against its specification — allowed only
+when all of these hold: (1) the code's author is not you, not your subagents, and not a local
+model in this task; (2) the specification existed before the audit, is named by path and hash,
+and does not change during it — its sha256 before the first call and after the second go into the
+report, a mismatch means a new audit; (3) blind reading and comparison with the specification are
+two separate sequential calls, and the first one is not given the specification (not a fan-out:
+the boundary is the amount of information); (4) your own conclusions about the same code are
+checked as case (a); (5) checkable artifact: a grep of the first call's brief, before launch,
+for the specification's path, its hash, and 5 phrases written out from it in advance — 0 matches.
+A customer's specification is not the checker's "expected result"; the ban on expected results
+applies in full to case (a), and to case (b) only in the first call. The loophole "my own code
+declared to be someone else's" was found by a sterile pass — condition (1) closes it.
 
 **An annotation checks direction, not the number.** A number comes only from a justified source
 (a table, a results section), and the brief must require **naming the section**. Verification
@@ -376,6 +418,12 @@ hash of the claims file into the brief, match the report against the subagent's 
 the transcript, and the number of transcripts with that brief equals the number of passes. The
 report's last line is exactly "unverified claims: N, bypasses with exit code 0: M"; closed at
 N=0. Without tooling for this, do the same by hand and state "gate not applied".
+This is a deliberate exception to "never give the verifier your expected answer" (§12): the claims
+list is the author's claims *to be refuted*, not answers to confirm. The adversarial verifier first writes out
+the object's claims itself and only then compares them with the list. Honest status: that order
+rests on the brief's instruction, not on mechanics — a mechanical split (a first call without the
+stage directory that writes its own list, a second call that receives the directory and that list)
+is an open item awaiting the user's decision.
 
 ## 13. Delegation ladder — work at the lowest rung that can carry the task
 
@@ -445,6 +493,15 @@ hypothesis to validate against the source, not a fact to relay unchecked. **Raw 
 script or local-model helper that emits structured output with field provenance, and consume only
 the extracted result; file plumbing of ≤3 steps you do yourself.
 
+**Scope: what was asked.** A new script, hook, file or rule that was neither named in the request
+nor prescribed by the doctrine is a *proposal* to the user, not part of the work. "Prescribed"
+means whatever the instruction files and their references require — for example the self-audit
+and its claims list (§12), incident logs, the lessons inbox, the decisions log, the rule
+executability log (§21), the session-state file (§11), recording knowledge sources (§6). Two
+exceptions, both done at once and named in the report: (1) without it, harm would arrive before
+anyone noticed; (2) adding it later would be expensive — stored data, a public interface, money,
+security. Checkable artifact: a report line "outside the request: <list or 'none'>".
+
 ## 14. Log incidents in two separate streams, apply the strongest available fix
 
 Split incident logging into: **process incidents** (your own failures — a silent-fail, a false
@@ -473,8 +530,16 @@ characters). Lessons go to an inbox file and are triaged: noise / local / class-
 doctrine-level; a fact about the platform, OS or a tool is never "local". (2) A measure is
 accepted only with a check: a hook or gate — mutationally (§12); a text rule — the question "where
 will this surface?" asked by someone other than its author; no answer means the rule is stillborn.
-(3) Lessons enter context **selectively (≤3)**, not as a journal. Full body:
-[references/error-classes.md](references/error-classes.md).
+(3) Lessons enter context **selectively (≤3)**, not as a journal: a small script reads only the
+catalogue of error classes (title, formulation and trigger signature per class), weights
+stem matches by rarity (IDF), normalizes the score by text length, and returns up to K classes
+with their "injection question" — only into the *executor's* brief, never the verifier's
+(a memory block in a verifier's brief defeats sterility). Cut-off: normalized score ≥ 0.10 and at
+least two matched stems — assigned from six samples, the share of correct picks not measured, and
+the selection is lexical, so synonyms absent from a class's text are invisible to it. The raw inbox and incident
+journals are not a source of the selection: a lesson enters it after triage, when it becomes a
+class. Full body: [references/error-classes.md](references/error-classes.md) and
+[references/iron-mode.md](references/iron-mode.md), section C.4.
 
 ## 15. Bash on Windows: quoting gotcha worth knowing
 
