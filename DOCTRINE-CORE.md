@@ -59,13 +59,15 @@ don't break a rule silently:
    until answered. Ask it with the harness's structured-question tool (up to 4 questions, 2–4
    options each, the recommended option first and marked, each option's consequence in its
    description), one object per question — a "yes" covers only the action it names. Everything
-   else goes into the report, at most one screen, without a question. Violation: a key question
+   else the agent decides itself and states in the report, without a question. Violation: a key question
    buried as "continue?" at the end of a report. Where the environment has no such tool,
    numbered options in text with a note that the form is unavailable. A subagent does not ask the
    user: it returns the key question to the orchestrator, which asks. Checkable artifact: a key
    action in the tool log is preceded by a call of the question tool, and the answer is quoted in
-   the report. Every "explicit yes of the user" demanded elsewhere in this document (§12, §20) is
-   obtained this way.
+   the report. Every "explicit yes of the user" demanded elsewhere in this document (push and deletion in §20,
+   large downloads, actions in the user's own browser) is obtained this way. Origin: the user
+   asked for "key moments as a form with options"; the three-part definition of "key" and the
+   word "violation" are the maintainer's wording.
 
 ## 2. Context hygiene
 
@@ -73,8 +75,8 @@ Context rot is real — output quality drops measurably as the context window fi
 it's technically full. Discipline:
 - Watch your context fill against thresholds expressed in **absolute tokens**, not percentages
   (a percentage depends on which base you pick — nominal window or auto-compaction point — and
-  drifted with every window size). Values used here for a ~1M-token window, assigned rather than
-  measured: **450k** — don't start new lines of work or large reads, finish the current step;
+  drifted with every window size). Values used here for a ~1M-token window, set by the user's
+  decision, not measured: **450k** — don't start new lines of work or large reads, finish the current step;
   **500k** — mandatory *planned* compaction (procedure in §11); **600k** — no new subagent or
   workflow dispatches until a ready handoff exists; **700k** — the harness's auto-compaction
   ceiling, set explicitly, an emergency measure. The signals come from a hook that counts the
